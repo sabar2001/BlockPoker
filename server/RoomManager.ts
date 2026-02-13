@@ -69,15 +69,8 @@ export class RoomManager {
       const room = this.rooms.get(code);
       if (!room) { callback({ success: false, error: 'Room not found' }); return; }
       
-      // Check if game is actively in a round (not waiting for deal)
-      const isActiveRound = room.game.isPlaying && !room.game.waitingForDeal;
-      console.log(`[Room] Join attempt by ${data.playerName} to ${code}: isPlaying=${room.game.isPlaying}, waitingForDeal=${room.game.waitingForDeal}, blocking=${isActiveRound}`);
-      
-      if (isActiveRound) { 
-        console.log(`[Room] ${data.playerName} blocked from joining ${code} - active round in progress`);
-        callback({ success: false, error: 'Game in progress' }); 
-        return; 
-      }
+      // Allow joining at any time - players can join between hands or sit out current hand
+      console.log(`[Room] Join attempt by ${data.playerName} to ${code}: isPlaying=${room.game.isPlaying}, waitingForDeal=${room.game.waitingForDeal}`);
 
       this.leaveRoom(socket);
       const player = room.game.addPlayer(socket.id, data.playerName, data.buyIn);

@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { socketService } from '../services/socketService';
 import { EmoteType } from '../shared/protocol';
+import { Card } from '../types';
+import { MobileCardOverlay } from './MobileCardOverlay';
 
 interface MobileControlsProps {
   onAction: (action: 'fold' | 'call' | 'raise', amount?: number) => void;
@@ -15,6 +17,9 @@ interface MobileControlsProps {
   roomCode?: string;
   chips?: number;
   pot?: number;
+  myHand?: Card[];
+  communityCards?: Card[];
+  isFolded?: boolean;
 }
 
 const EMOTES: { emote: EmoteType; icon: string }[] = [
@@ -28,7 +33,8 @@ const EMOTES: { emote: EmoteType; icon: string }[] = [
 
 export const MobileControls: React.FC<MobileControlsProps> = ({
   onAction, isUserTurn, callAmount, raiseAmount, raiseLabel, onCameraRotate,
-  timeRemaining = 0, waitingForDeal = false, isHost = false, roomCode = '', chips = 0, pot = 0
+  timeRemaining = 0, waitingForDeal = false, isHost = false, roomCode = '', chips = 0, pot = 0,
+  myHand = [], communityCards = [], isFolded = false
 }) => {
   const [startTouch, setStartTouch] = useState<{ x: number; y: number } | null>(null);
   const rotation = useRef({ yaw: 0, pitch: -0.3 }); // Initialize with correct starting pitch
@@ -188,6 +194,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           </div>
         </div>
       )}
+
+      {/* Card Overlay - Show player hand and community cards */}
+      <MobileCardOverlay 
+        myHand={myHand} 
+        communityCards={communityCards} 
+        isFolded={isFolded} 
+      />
     </>
   );
 };

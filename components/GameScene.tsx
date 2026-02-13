@@ -453,8 +453,8 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
         />
       ))}
 
-      {/* Render User Hand FPS Style - hide during SHOWDOWN */}
-      {user && !user.isFolded && user.hand.length > 0 && gameStage !== 4 && (
+      {/* Render User Hand FPS Style - desktop only, hide during SHOWDOWN and on mobile */}
+      {user && !user.isFolded && user.hand.length > 0 && gameStage !== 4 && !isMobile && (
         <FirstPersonHand hand={user.hand} />
       )}
     </>

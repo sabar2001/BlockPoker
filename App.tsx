@@ -263,6 +263,9 @@ const App: React.FC = () => {
           roomCode={roomCode}
           chips={me?.chips || 0}
           pot={pot}
+          myHand={myHand}
+          communityCards={communityCards}
+          isFolded={me?.isFolded || false}
         />
       ) : (
         <HUD
