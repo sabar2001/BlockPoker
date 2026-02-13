@@ -1,0 +1,7 @@
+{
+  "name": "Blocky Bluff 3D",
+  "description": "A Krunker-style first-person poker game with AI-driven proximity chat using Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

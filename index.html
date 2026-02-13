@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blocky Bluff 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+      body, html, #root { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #111; user-select: none; font-family: 'VT323', monospace; }
+      /* Custom Scrollbar for chat */
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+      
+      .krunker-text {
+        text-shadow: 2px 2px 0px #000;
+      }
+      .crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 20px;
+        height: 20px;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 100;
+      }
+      .crosshair::before, .crosshair::after {
+        content: '';
+        position: absolute;
+        background: #0f0;
+      }
+      .crosshair::before {
+        top: 9px;
+        left: 0;
+        width: 20px;
+        height: 2px;
+      }
+      .crosshair::after {
+        top: 0;
+        left: 9px;
+        width: 2px;
+        height: 20px;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react/": "https://esm.sh/react@18.2.0/",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "@google/genai": "https://esm.sh/@google/genai@0.2.1",
+    "three": "https://esm.sh/three@0.161.0",
+    "three/": "https://esm.sh/three@0.161.0/",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.16?external=react,react-dom,three",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@9.102.6?external=react,react-dom,three,@react-three/fiber",
+    "uuid": "https://esm.sh/uuid@9.0.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <div class="crosshair"></div>
+  </body>
+</html>
