@@ -91,7 +91,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       />
       
       {/* Top HUD Info */}
-      <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none font-[VT323]" style={{ zIndex: 40 }}>
+      <div className="absolute top-6 left-6 right-6 flex justify-between pointer-events-none font-[VT323]" style={{ zIndex: 40 }}>
         <div className="bg-black/70 px-3 py-2 border-l-4 border-green-500">
           {roomCode && (
             <div className="text-yellow-300 text-lg font-mono">ROOM: {roomCode}</div>
@@ -103,10 +103,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
       </div>
       
-      {/* Timer Display - Top Center */}
+      {/* Timer Display - positioned below HUD with safe spacing */}
       {isUserTurn && timeRemaining > 0 && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2" style={{ zIndex: 45 }}>
-          <div className={`text-6xl font-bold ${getTimerColor()} font-[VT323] bg-black/70 px-6 py-2 rounded-lg`}>
+        <div className="absolute left-1/2 -translate-x-1/2" style={{ top: '140px', zIndex: 45 }}>
+          <div className={`text-5xl font-bold ${getTimerColor()} font-[VT323] bg-black/80 px-8 py-3 rounded-xl border-2 ${
+            timeRemaining <= 5 ? 'border-red-500 animate-pulse' : 
+            timeRemaining <= 10 ? 'border-yellow-500' : 'border-green-500'
+          }`}>
             {timeRemaining}s
           </div>
         </div>
@@ -114,50 +117,64 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       
       {/* Deal Button - Center when waiting */}
       {isHost && waitingForDeal && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto" style={{ zIndex: 60 }}>
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ zIndex: 65 }}>
           <button
             onClick={() => socketService.dealNextRound()}
             onTouchStart={(e) => { e.stopPropagation(); socketService.dealNextRound(); }}
-            className="bg-green-900 text-white text-3xl px-12 py-6 rounded-lg border-4 border-green-500 active:bg-green-800 font-[VT323] animate-pulse"
+            className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white text-3xl font-bold px-12 py-8 rounded-2xl border-4 border-green-400 shadow-2xl animate-pulse font-[VT323] active:scale-95 transition-transform"
+            style={{ pointerEvents: 'auto' }}
           >
-            DEAL NEXT HAND
+            DEAL CARDS
           </button>
         </div>
       )}
       
-      {/* Action Buttons - Bottom right, thumb-friendly zone */}
+      {/* Action Buttons - Bottom center, horizontal layout with safe areas */}
       {isUserTurn && (
-        <div className="absolute bottom-4 right-4 flex flex-col gap-3" style={{ zIndex: 50 }}>
+        <div 
+          className="absolute left-0 right-0 flex justify-center gap-4 px-6" 
+          style={{ bottom: 'max(24px, env(safe-area-inset-bottom, 24px))', zIndex: 50 }}
+        >
           <button 
             onClick={() => onAction('fold')}
             onTouchStart={(e) => { e.stopPropagation(); onAction('fold'); }}
-            className="bg-red-900 text-white text-xl px-8 py-4 rounded-lg border-2 border-red-500 active:bg-red-800 min-w-[120px] min-h-[60px] font-[VT323]">
+            className="bg-red-900/90 backdrop-blur text-white text-2xl font-bold px-6 py-5 rounded-xl border-3 border-red-500 active:scale-95 transition-transform shadow-lg min-w-[140px] min-h-[70px] font-[VT323]"
+            style={{ pointerEvents: 'auto' }}
+          >
             FOLD
           </button>
           <button 
             onClick={() => onAction('call')}
             onTouchStart={(e) => { e.stopPropagation(); onAction('call'); }}
-            className="bg-blue-900 text-white text-xl px-8 py-4 rounded-lg border-2 border-blue-500 active:bg-blue-800 min-w-[120px] min-h-[60px] font-[VT323]">
+            className="bg-blue-900/90 backdrop-blur text-white text-2xl font-bold px-6 py-5 rounded-xl border-3 border-blue-500 active:scale-95 transition-transform shadow-lg min-w-[140px] min-h-[70px] font-[VT323]"
+            style={{ pointerEvents: 'auto' }}
+          >
             {callAmount > 0 ? `CALL ${callAmount}` : 'CHECK'}
           </button>
           <button 
             onClick={() => onAction('raise', raiseAmount)}
             onTouchStart={(e) => { e.stopPropagation(); onAction('raise', raiseAmount); }}
-            className="bg-yellow-900 text-white text-xl px-8 py-4 rounded-lg border-2 border-yellow-500 active:bg-yellow-800 min-w-[120px] min-h-[60px] font-[VT323]">
-            {raiseLabel}
+            className="bg-yellow-900/90 backdrop-blur text-white text-2xl font-bold px-6 py-5 rounded-xl border-3 border-yellow-500 active:scale-95 transition-transform shadow-lg min-w-[140px] min-h-[70px] font-[VT323]"
+            style={{ pointerEvents: 'auto' }}
+          >
+            {raiseLabel} {raiseAmount}
           </button>
         </div>
       )}
 
-      {/* Emote Bar - Bottom left */}
-      <div className="absolute bottom-4 left-4 flex gap-2" style={{ zIndex: 50 }}>
-        {EMOTES.map((em, idx) => (
-          <button 
-            key={idx}
-            onClick={() => socketService.sendEmote(em.emote)}
-            onTouchStart={(e) => { e.stopPropagation(); socketService.sendEmote(em.emote); }}
-            className="bg-black/70 hover:bg-black/90 active:bg-black border border-gray-600 w-12 h-12 flex items-center justify-center text-2xl rounded"
-            title={em.emote}>
+      {/* Emote Bar - Bottom left, above action buttons */}
+      <div 
+        className="absolute left-6 flex gap-3" 
+        style={{ bottom: 'max(100px, calc(env(safe-area-inset-bottom, 24px) + 76px))', zIndex: 50 }}
+      >
+        {EMOTES.map((em) => (
+          <button
+            key={em.emote}
+            onClick={() => socketService.sendEmote(em.emote as EmoteType)}
+            onTouchStart={(e) => { e.stopPropagation(); socketService.sendEmote(em.emote as EmoteType); }}
+            className="bg-black/80 backdrop-blur active:bg-black/95 border-2 border-gray-500 active:border-gray-300 w-14 h-14 flex items-center justify-center text-3xl rounded-xl shadow-lg transition-all active:scale-90"
+            style={{ pointerEvents: 'auto' }}
+          >
             {em.icon}
           </button>
         ))}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { socketService } from './services/socketService';
 import { voiceService } from './services/voiceService';
 import { GameStateBroadcast, HandDeal, PublicPlayer, Card as ProtoCard, GameStage as ProtoGameStage, GameLogEntry } from './shared/protocol';
@@ -44,6 +44,7 @@ const App: React.FC = () => {
   const [screen, setScreen] = useState<AppScreen>('lobby');
   const [players, setPlayers] = useState<Player[]>([]);
   const [myHand, setMyHand] = useState<Card[]>([]);
+  const myHandRef = useRef<Card[]>([]);
   const [communityCards, setCommunityCards] = useState<Card[]>([]);
   const [pot, setPot] = useState(0);
   const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
@@ -69,11 +70,11 @@ const App: React.FC = () => {
       socketService.on('game:state', (state: GameStateBroadcast) => {
         const clientPlayers = state.players.map(toClientPlayer);
 
-        // Inject our hand into our player
+        // Inject our hand into our player using ref (avoids stale closure)
         const myId = socketService.id;
         const meIdx = clientPlayers.findIndex(p => p.id === myId);
         if (meIdx !== -1) {
-          clientPlayers[meIdx].hand = myHand;
+          clientPlayers[meIdx].hand = myHandRef.current;
         }
 
         setPlayers(clientPlayers);
@@ -162,10 +163,12 @@ const App: React.FC = () => {
     ];
 
     return () => unsubs.forEach(u => u());
-  }, [myHand]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Subscribe once - myHand accessed via ref
 
-  // Also update our hand in the players array when myHand changes
+  // Keep ref in sync and inject hand into players array
   useEffect(() => {
+    myHandRef.current = myHand;
     if (myHand.length > 0) {
       setPlayers(prev => prev.map(p =>
         p.id === socketService.id ? { ...p, hand: myHand } : p
@@ -175,14 +178,13 @@ const App: React.FC = () => {
 
   const handleGameStart = useCallback(async () => {
     setScreen('game');
-    // Initialize voice chat
+    // Initialize voice chat (non-blocking - never use alert() which freezes rendering)
     try {
       await voiceService.init();
       console.log('[App] Voice service initialized successfully');
     } catch (e) {
-      console.error('[App] Voice chat initialization failed:', e);
-      // Audio will be disabled but game continues
-      alert('Microphone access denied. Voice chat will be disabled.');
+      console.warn('[App] Voice chat initialization failed:', e);
+      // Voice disabled but game continues - no alert() to avoid blocking Canvas render
     }
   }, []);
 
@@ -198,6 +200,11 @@ const App: React.FC = () => {
   const handleCameraRotate = useCallback((yaw: number, pitch: number) => {
     setCameraRotation({ yaw, pitch });
   }, []); // Empty deps - this callback is stable
+
+  // Called from CameraPositioner when it computes the initial yaw for the player's seat
+  const handleInitialYaw = useCallback((yaw: number) => {
+    setCameraRotation(prev => ({ ...prev, yaw }));
+  }, []);
 
   if (screen === 'lobby') {
     return <Lobby onGameStart={handleGameStart} />;
@@ -238,6 +245,8 @@ const App: React.FC = () => {
         onLockChange={setIsLocked}
         isMobile={isMobile}
         cameraRotation={cameraRotation}
+        onInitialYaw={handleInitialYaw}
+        gameStage={gameStage}
       />
 
       {isMobile ? (

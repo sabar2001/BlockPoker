@@ -9,8 +9,8 @@ export const RANKS = [
 ];
 
 // 9 seats on an oval table
-const RADIUS_X = 5;
-const RADIUS_Z = 3.5;
+const RADIUS_X = 7;
+const RADIUS_Z = 5;
 const ANGLES = [90, 50, 10, -30, -70, -110, -150, 170, 130].map(deg => deg * (Math.PI / 180));
 
 export const PLAYER_POSITIONS = ANGLES.map(angle => [

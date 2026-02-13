@@ -270,7 +270,10 @@ export class GameManager {
 
     this.addLog('deal', `New ${this.tableConfig.variant} round started`);
 
-    // Deal
+    // Signal new round FIRST so client clears old hand/winners before receiving new cards
+    this.onNewRound();
+
+    // THEN deal cards (client receives game:hand AFTER game:new-round)
     const cardsPerPlayer = this.tableConfig.variant === 'OMAHA' ? 4 : 2;
     for (const p of this.players) {
       if (!p.isFolded) {
@@ -304,7 +307,6 @@ export class GameManager {
       this.lastAggressorIndex = 0;
     }
 
-    this.onNewRound();
     this.onStateChange();
     this.startActionTimer();
   }
@@ -469,15 +471,15 @@ export class GameManager {
 
     this.onStateChange();
 
-    // Set waiting for deal instead of auto-starting
+    // Auto-deal after showing results
     this.roundTimer = setTimeout(() => {
       this.dealerIndex = this.findNextActive(this.dealerIndex);
       this.players = this.players.filter(p => p.isConnected);
 
       const alive = this.players.filter(p => p.chips > 0 && p.isConnected);
       if (alive.length >= 1) {
-        this.waitingForDeal = true;
-        this.onStateChange();
+        this.addLog('deal', 'Auto-dealing next hand...');
+        this.startNewRound(); // Auto-deal instead of waiting
       } else {
         this.isPlaying = false;
         this.onStateChange();

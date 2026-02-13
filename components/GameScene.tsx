@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-// Removed Text from drei - using basic Three.js only
+// No drei Text/Html - they cause Suspense hang and black screen
 import * as THREE from 'three';
 import { Player, Card as CardType, Suit } from '../types';
 import PlayerAvatar from './PlayerAvatar';
-import { DEFAULT_FONT } from '../constants';
 import { socketService } from '../services/socketService';
 import { voiceService } from '../services/voiceService';
 
@@ -17,22 +16,74 @@ interface GameSceneProps {
   onLockChange?: (locked: boolean) => void;
   isMobile?: boolean;
   cameraRotation?: { yaw: number; pitch: number };
+  onInitialYaw?: (yaw: number) => void;
+  gameStage?: number;
+}
+
+// Creates a canvas texture for card faces (rank + suit)
+function createCardFaceTexture(rank: string, suit: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  canvas.width = 140;
+  canvas.height = 200;
+
+  // White card background
+  ctx.fillStyle = '#f5f5f0';
+  ctx.fillRect(0, 0, 140, 200);
+
+  // Border
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(2, 2, 136, 196);
+
+  const isRed = suit === '\u2665' || suit === '\u2666';
+  const color = isRed ? '#cc0000' : '#111111';
+
+  // Top-left rank
+  ctx.font = 'bold 32px monospace';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'left';
+  ctx.fillText(rank, 8, 36);
+
+  // Top-left suit (smaller)
+  ctx.font = '24px serif';
+  ctx.fillText(suit, 10, 60);
+
+  // Center suit (large)
+  ctx.font = '60px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(suit, 70, 120);
+
+  // Bottom-right rank (upside down via rotation trick: just place it)
+  ctx.font = 'bold 32px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(rank, 132, 188);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
 }
 
 const CardMesh: React.FC<{ card: CardType; position: [number, number, number]; rotation?: [number, number, number]; scale?: number }> = ({ card, position, rotation = [-Math.PI / 2, 0, 0], scale = 1 }) => {
-  const getColor = (suit: Suit) => (suit === Suit.HEARTS || suit === Suit.DIAMONDS) ? '#ff4444' : '#111';
+  const faceTexture = useMemo(() => createCardFaceTexture(card.rank, card.suit), [card.rank, card.suit]);
 
   return (
     <group position={position} rotation={rotation} scale={scale}>
+      {/* Card body */}
       <mesh receiveShadow castShadow>
         <boxGeometry args={[0.7, 1, 0.02]} />
         <meshStandardMaterial color="#f0f0f0" />
       </mesh>
+      {/* Card back (blue) */}
       <mesh position={[0, 0, -0.011]} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[0.7, 1]} />
         <meshStandardMaterial color="#3b82f6" />
       </mesh>
-      {/* Text removed - causing Suspense hang */}
+      {/* Card face with rank/suit via canvas texture */}
+      <mesh position={[0, 0, 0.011]}>
+        <planeGeometry args={[0.7, 1]} />
+        <meshBasicMaterial map={faceTexture} transparent />
+      </mesh>
     </group>
   );
 };
@@ -83,52 +134,97 @@ const PokerTable = ({ communityCards, pot }: { communityCards: CardType[], pot: 
 
   return (
     <group>
-      {/* Main oval table surface */}
-      <mesh receiveShadow position={[0, 0.75, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[5.2, 5.2, 0.15, 32]} />
-        <meshStandardMaterial color="#8B4513" roughness={0.3} metalness={0.1} />
+      {/* Main table base - darker wood */}
+      <mesh receiveShadow position={[0, 0.7, 0]}>
+        <cylinderGeometry args={[5.3, 5.3, 0.2, 64]} />
+        <meshStandardMaterial 
+          color="#5C3317" 
+          roughness={0.6} 
+          metalness={0.05}
+        />
       </mesh>
       
-      {/* Green felt playing surface */}
-      <mesh receiveShadow position={[0, 0.83, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[4.8, 4.8, 0.02, 32]} />
-        <meshStandardMaterial color="#0a5f38" roughness={0.8} />
+      {/* Green felt playing surface - higher quality */}
+      <mesh receiveShadow position={[0, 0.81, 0]}>
+        <cylinderGeometry args={[4.9, 4.9, 0.01, 64]} />
+        <meshStandardMaterial 
+          color="#0a4d2e" 
+          roughness={0.95}
+          metalness={0}
+        />
       </mesh>
       
-      {/* Table rim/rail */}
-      <mesh position={[0, 0.85, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[5, 0.2, 16, 32]} />
-        <meshStandardMaterial color="#654321" roughness={0.4} />
+      {/* Inner table edge detail */}
+      <mesh position={[0, 0.82, 0]}>
+        <torusGeometry args={[4.8, 0.05, 8, 64]} />
+        <meshStandardMaterial 
+          color="#8B7355" 
+          roughness={0.3}
+          metalness={0.2}
+        />
       </mesh>
 
-      {/* 9 seat markers (small circles showing seat positions) */}
+      {/* 9 seat markers - more visible */}
       {[90, 50, 10, -30, -70, -110, -150, 170, 130].map((deg, i) => {
         const angle = deg * (Math.PI / 180);
-        const x = Math.cos(angle) * 5.5;
-        const z = Math.sin(angle) * 5.5;
+        const x = Math.cos(angle) * 5.6;
+        const z = Math.sin(angle) * 5.6;
         return (
-          <mesh key={i} position={[x, 0.84, z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[0.3, 16]} />
-            <meshStandardMaterial color="#ffffff" opacity={0.3} transparent />
-          </mesh>
+          <group key={i} position={[x, 0.82, z]}>
+            {/* Seat marker */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[0.35, 32]} />
+              <meshStandardMaterial 
+                color="#ffffff" 
+                opacity={0.15} 
+                transparent 
+              />
+            </mesh>
+            {/* Seat number indicator */}
+            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[0.15, 16]} />
+              <meshStandardMaterial 
+                color="#ffd700" 
+                emissive="#ffd700"
+                emissiveIntensity={0.3}
+              />
+            </mesh>
+          </group>
         );
       })}
 
-      {/* Community cards display area */}
+      {/* Community cards */}
       {communityCards.map((card, i) => (
         <CardMesh
           key={i}
           card={card}
-          position={[-2 + (i * 1.0), 0.9, 0]}
+          position={[-2 + (i * 1.0), 0.85, 0]}
           rotation={[-Math.PI / 2, 0, cardRotations[i] || 0]}
         />
       ))}
 
-      {/* Pot indicator (raised gold box) */}
-      <mesh position={[0, 1.2, -1.5]} castShadow>
-        <boxGeometry args={[1.5, 0.4, 0.6]} />
-        <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.5} />
-      </mesh>
+      {/* Pot indicator with better styling */}
+      <group position={[0, 1.1, -1.8]}>
+        <mesh castShadow>
+          <boxGeometry args={[1.8, 0.5, 0.7]} />
+          <meshStandardMaterial 
+            color="#d4af37" 
+            emissive="#d4af37" 
+            emissiveIntensity={0.4}
+            roughness={0.3}
+            metalness={0.6}
+          />
+        </mesh>
+        {/* Pot label backing */}
+        <mesh position={[0, 0, 0.36]}>
+          <planeGeometry args={[1.6, 0.4]} />
+          <meshStandardMaterial 
+            color="#1a1a1a"
+            opacity={0.8}
+            transparent
+          />
+        </mesh>
+      </group>
     </group>
   );
 };
@@ -161,30 +257,56 @@ const CloudPlatform = () => (
   </group>
 );
 
-// Positions camera at player's seat for first-person view
-const CameraPositioner = ({ playerPosition }: { playerPosition?: [number, number, number] }) => {
+// Positions camera at player's seat for first-person view, facing table center
+const CameraPositioner = ({ playerPosition, onInitialYaw }: { playerPosition?: [number, number, number]; onInitialYaw?: (yaw: number) => void }) => {
   const { camera } = useThree();
+  const targetPosition = useRef<[number, number, number] | null>(null);
+  const initialLookSet = useRef(false);
   
   React.useEffect(() => {
     if (playerPosition) {
-      // Position camera at player's seat, elevated 1.6 units (eye level)
-      camera.position.set(playerPosition[0], 1.6, playerPosition[2]);
-      console.log('[CameraPositioner] Set camera to player position:', playerPosition);
+      targetPosition.current = [playerPosition[0], 1.6, playerPosition[2]];
+      initialLookSet.current = false; // Reset on position change
+      console.log('[CameraPositioner] Target position set:', targetPosition.current);
     }
-  }, [camera, playerPosition]);
+  }, [playerPosition]);
+  
+  useFrame(() => {
+    if (targetPosition.current) {
+      const [x, y, z] = targetPosition.current;
+      camera.position.set(x, y, z);
+
+      // Set initial look direction toward table center (once)
+      if (!initialLookSet.current) {
+        const yaw = Math.atan2(-x, -z); // Angle from seat to origin
+        const euler = new THREE.Euler(-0.3, yaw, 0, 'YXZ');
+        camera.quaternion.setFromEuler(euler);
+        initialLookSet.current = true;
+        console.log('[CameraPositioner] Initial look set, yaw:', yaw);
+        // Propagate yaw to parent so TouchCameraControls starts correct
+        onInitialYaw?.(yaw);
+      }
+    }
+  });
   
   return null;
 };
 
 // Custom camera controller for desktop (replaces PointerLockControls)
 const DesktopCameraControls = () => {
-  const { camera, gl } = useThree();
+  const { camera } = useThree();
   const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
-  const isLocked = useRef(false);
+  const initialized = useRef(false);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!document.pointerLockElement) return;
+
+      // Initialize euler from current camera rotation on first mouse move
+      if (!initialized.current) {
+        euler.current.setFromQuaternion(camera.quaternion, 'YXZ');
+        initialized.current = true;
+      }
 
       const sensitivity = 0.002;
       euler.current.y -= e.movementX * sensitivity;
@@ -196,7 +318,11 @@ const DesktopCameraControls = () => {
 
     const handleLockChange = () => {
       const locked = !!document.pointerLockElement;
-      isLocked.current = locked;
+      if (locked) {
+        // Re-sync euler from camera when pointer lock is acquired
+        euler.current.setFromQuaternion(camera.quaternion, 'YXZ');
+        initialized.current = true;
+      }
       console.log('[DesktopCameraControls] Pointer lock changed:', locked);
     };
 
@@ -281,7 +407,7 @@ const VoiceSpatialUpdater = ({ players, myId }: { players: Player[]; myId?: stri
   return null;
 };
 
-const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, currentTurnIndex, myId, isMobile, cameraRotation }) => {
+const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, currentTurnIndex, myId, isMobile, cameraRotation, onInitialYaw, gameStage }) => {
   const { camera } = useThree();
   const [listener] = useState(() => new THREE.AudioListener());
 
@@ -295,7 +421,7 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
 
   return (
     <>
-      <CameraPositioner playerPosition={user?.position} />
+      <CameraPositioner playerPosition={user?.position} onInitialYaw={onInitialYaw} />
       {isMobile ? (
         <TouchCameraControls yaw={cameraRotation?.yaw || 0} pitch={cameraRotation?.pitch || -0.3} />
       ) : (
@@ -304,13 +430,14 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
       <LookBroadcaster isMobile={isMobile} />
       <VoiceSpatialUpdater players={players} myId={myId} />
       
-      {/* Bright lighting without Sky component */}
+      {/* Enhanced lighting for better table visibility */}
       <color attach="background" args={['#87CEEB']} />
-      <fog attach="fog" args={['#87CEEB', 10, 50]} />
-      <ambientLight intensity={2} />
-      <hemisphereLight args={['#87CEEB', '#ffffff', 2]} />
-      <pointLight position={[0, 15, 0]} intensity={5} castShadow />
-      <directionalLight position={[5, 10, 5]} intensity={2} color="#ffffff" castShadow />
+      <fog attach="fog" args={['#87CEEB', 15, 60]} />
+      <ambientLight intensity={1.5} />
+      <hemisphereLight args={['#87CEEB', '#ffffff', 1.5]} />
+      <pointLight position={[0, 8, 0]} intensity={6} castShadow />
+      <directionalLight position={[5, 8, 3]} intensity={2.5} color="#ffffff" castShadow />
+      <directionalLight position={[-5, 8, -3]} intensity={1.5} color="#ffffff" />
 
       <PokerTable communityCards={communityCards} pot={pot} />
       <CloudPlatform />
@@ -326,8 +453,8 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
         />
       ))}
 
-      {/* Render User Hand FPS Style */}
-      {user && !user.isFolded && user.hand.length > 0 && (
+      {/* Render User Hand FPS Style - hide during SHOWDOWN */}
+      {user && !user.isFolded && user.hand.length > 0 && gameStage !== 4 && (
         <FirstPersonHand hand={user.hand} />
       )}
     </>

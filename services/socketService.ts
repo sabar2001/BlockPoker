@@ -76,11 +76,22 @@ class SocketService {
   setReady(ready: boolean): void { this.socket?.emit('room:ready', { ready }); }
   updateSettings(tableConfig: Partial<TableConfig>): void { this.socket?.emit('room:settings', { tableConfig }); }
   startGame(): void { this.socket?.emit('game:start'); }
-  dealNextRound(): void { this.socket?.emit('game:deal'); }
+  dealNextRound(): void {
+    if (!this.socket?.connected) {
+      console.error('[SocketService] Cannot deal: socket not connected');
+      return;
+    }
+    console.log('[SocketService] Dealing next round');
+    this.socket.emit('game:deal');
+  }
 
   // --- Game Actions ---
   sendAction(action: PlayerAction, amount?: number): void {
-    this.socket?.emit('game:action', { action, amount });
+    if (!this.socket?.connected) {
+      console.error('[SocketService] Cannot send action: socket not connected');
+      return;
+    }
+    this.socket.emit('game:action', { action, amount });
   }
 
   // --- Real-time ---
@@ -89,7 +100,12 @@ class SocketService {
   }
 
   sendEmote(emote: EmoteType): void {
-    this.socket?.emit('player:emote', { emote });
+    if (!this.socket?.connected) {
+      console.error('[SocketService] Cannot send emote: socket not connected');
+      return;
+    }
+    console.log('[SocketService] Sending emote:', emote);
+    this.socket.emit('player:emote', { emote });
   }
 
   sendChat(message: string): void {
