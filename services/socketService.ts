@@ -2,7 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import {
   ClientToServerEvents, ServerToClientEvents,
   RoomState, GameStateBroadcast, HandDeal, PublicPlayer,
-  PlayerAction, EmoteType, TableConfig,
+  PlayerAction, EmoteType, TableConfig, GameLogEntry,
 } from '../shared/protocol';
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -30,6 +30,8 @@ class SocketService {
     this.socket.on('game:hand', (h) => this.emit('game:hand', h));
     this.socket.on('game:round-end', (d) => this.emit('game:round-end', d));
     this.socket.on('game:new-round', () => this.emit('game:new-round'));
+    this.socket.on('game:timer-update', (d) => this.emit('game:timer-update', d));
+    this.socket.on('game:log', (log) => this.emit('game:log', log));
     this.socket.on('player:look-update', (d) => this.emit('player:look-update', d));
     this.socket.on('player:emote-update', (d) => this.emit('player:emote-update', d));
     this.socket.on('player:chat-update', (d) => this.emit('player:chat-update', d));
@@ -74,6 +76,7 @@ class SocketService {
   setReady(ready: boolean): void { this.socket?.emit('room:ready', { ready }); }
   updateSettings(tableConfig: Partial<TableConfig>): void { this.socket?.emit('room:settings', { tableConfig }); }
   startGame(): void { this.socket?.emit('game:start'); }
+  dealNextRound(): void { this.socket?.emit('game:deal'); }
 
   // --- Game Actions ---
   sendAction(action: PlayerAction, amount?: number): void {

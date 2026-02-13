@@ -83,28 +83,51 @@ const PokerTable = ({ communityCards, pot }: { communityCards: CardType[], pot: 
 
   return (
     <group>
-      <mesh receiveShadow position={[0, -0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[5, 5, 0.2, 8]} />
-        <meshStandardMaterial color="#1f2937" roughness={0.8} />
+      {/* Main oval table surface */}
+      <mesh receiveShadow position={[0, 0.75, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[5.2, 5.2, 0.15, 32]} />
+        <meshStandardMaterial color="#8B4513" roughness={0.3} metalness={0.1} />
       </mesh>
-      <mesh receiveShadow position={[0, -0.19, 0]}>
-        <cylinderGeometry args={[4.5, 4.5, 0.21, 8]} />
-        <meshStandardMaterial color="#10b981" roughness={0.9} />
+      
+      {/* Green felt playing surface */}
+      <mesh receiveShadow position={[0, 0.83, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[4.8, 4.8, 0.02, 32]} />
+        <meshStandardMaterial color="#0a5f38" roughness={0.8} />
+      </mesh>
+      
+      {/* Table rim/rail */}
+      <mesh position={[0, 0.85, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[5, 0.2, 16, 32]} />
+        <meshStandardMaterial color="#654321" roughness={0.4} />
       </mesh>
 
+      {/* 9 seat markers (small circles showing seat positions) */}
+      {[90, 50, 10, -30, -70, -110, -150, 170, 130].map((deg, i) => {
+        const angle = deg * (Math.PI / 180);
+        const x = Math.cos(angle) * 5.5;
+        const z = Math.sin(angle) * 5.5;
+        return (
+          <mesh key={i} position={[x, 0.84, z]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.3, 16]} />
+            <meshStandardMaterial color="#ffffff" opacity={0.3} transparent />
+          </mesh>
+        );
+      })}
+
+      {/* Community cards display area */}
       {communityCards.map((card, i) => (
         <CardMesh
           key={i}
           card={card}
-          position={[-2 + (i * 1.0), 0.05, 0]}
+          position={[-2 + (i * 1.0), 0.9, 0]}
           rotation={[-Math.PI / 2, 0, cardRotations[i] || 0]}
         />
       ))}
 
-      {/* POT display removed temporarily - Text component causing issues */}
-      <mesh position={[0, 1.5, 0]}>
-        <boxGeometry args={[2, 0.8, 0.1]} />
-        <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.8} />
+      {/* Pot indicator (raised gold box) */}
+      <mesh position={[0, 1.2, -1.5]} castShadow>
+        <boxGeometry args={[1.5, 0.4, 0.6]} />
+        <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.5} />
       </mesh>
     </group>
   );
@@ -112,18 +135,46 @@ const PokerTable = ({ communityCards, pot }: { communityCards: CardType[], pot: 
 
 const CloudPlatform = () => (
   <group>
-    {/* Main floating platform - bright and very visible */}
-    <mesh position={[0, -1, 0]} receiveShadow castShadow>
-      <cylinderGeometry args={[6, 6, 0.4, 8]} />
+    {/* Main floating platform - lowered to support table */}
+    <mesh position={[0, -0.5, 0]} receiveShadow castShadow>
+      <cylinderGeometry args={[8, 8, 0.4, 32]} />
       <meshStandardMaterial color="#ffffff" roughness={0.2} metalness={0.1} />
     </mesh>
-    {/* Platform base for contrast */}
-    <mesh position={[0, -1.3, 0]}>
-      <cylinderGeometry args={[6.2, 6.2, 0.1, 8]} />
-      <meshStandardMaterial color="#88ccff" emissive="#88ccff" emissiveIntensity={0.5} />
+    {/* Platform base */}
+    <mesh position={[0, -0.8, 0]}>
+      <cylinderGeometry args={[8.2, 8.2, 0.1, 32]} />
+      <meshStandardMaterial color="#88ccff" emissive="#88ccff" emissiveIntensity={0.3} />
     </mesh>
+    
+    {/* Cloud-like pillars */}
+    {[0, 60, 120, 180, 240, 300].map((angle, i) => {
+      const rad = angle * (Math.PI / 180);
+      const x = Math.cos(rad) * 7;
+      const z = Math.sin(rad) * 7;
+      return (
+        <mesh key={i} position={[x, -2, z]}>
+          <cylinderGeometry args={[0.6, 0.8, 2, 8]} />
+          <meshStandardMaterial color="#e0f2fe" emissive="#e0f2fe" emissiveIntensity={0.2} />
+        </mesh>
+      );
+    })}
   </group>
 );
+
+// Positions camera at player's seat for first-person view
+const CameraPositioner = ({ playerPosition }: { playerPosition?: [number, number, number] }) => {
+  const { camera } = useThree();
+  
+  React.useEffect(() => {
+    if (playerPosition) {
+      // Position camera at player's seat, elevated 1.6 units (eye level)
+      camera.position.set(playerPosition[0], 1.6, playerPosition[2]);
+      console.log('[CameraPositioner] Set camera to player position:', playerPosition);
+    }
+  }, [camera, playerPosition]);
+  
+  return null;
+};
 
 // Custom camera controller for desktop (replaces PointerLockControls)
 const DesktopCameraControls = () => {
@@ -166,8 +217,18 @@ const DesktopCameraControls = () => {
 // Touch-based camera controls for mobile
 const TouchCameraControls = ({ yaw, pitch }: { yaw: number; pitch: number }) => {
   const { camera } = useThree();
+  const [isReady, setIsReady] = React.useState(false);
+
+  React.useEffect(() => {
+    console.log('[TouchCameraControls] Initialized with rotation:', { yaw, pitch });
+    // Mark ready after camera is available
+    if (camera) {
+      setIsReady(true);
+    }
+  }, [camera, yaw, pitch]);
 
   useFrame(() => {
+    if (!isReady) return; // Don't apply rotation until ready
     // Apply rotation from touch input
     const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ');
     camera.quaternion.setFromEuler(euler);
@@ -226,6 +287,7 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
 
   useEffect(() => {
     camera.add(listener);
+    console.log('[SceneContent] Initialized', { isMobile, cameraRotation, playersCount: players.length });
     return () => { camera.remove(listener); };
   }, [camera, listener]);
 
@@ -233,6 +295,7 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
 
   return (
     <>
+      <CameraPositioner playerPosition={user?.position} />
       {isMobile ? (
         <TouchCameraControls yaw={cameraRotation?.yaw || 0} pitch={cameraRotation?.pitch || -0.3} />
       ) : (
@@ -251,12 +314,6 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
 
       <PokerTable communityCards={communityCards} pot={pot} />
       <CloudPlatform />
-      
-      {/* Debug: Bright test sphere directly in view */}
-      <mesh position={[0, 1.5, -3]}>
-        <sphereGeometry args={[0.5, 32, 32]} />
-        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={0.5} />
-      </mesh>
 
       {/* Render all players (PlayerAvatar hides self) */}
       {players.map(p => (
@@ -295,8 +352,20 @@ const GameScene: React.FC<GameSceneProps> = (props) => {
       setIsLocked(locked);
       onLockChange?.(locked);
     };
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    };
+    
     document.addEventListener('pointerlockchange', handleLockChange);
-    return () => document.removeEventListener('pointerlockchange', handleLockChange);
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('pointerlockchange', handleLockChange);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [onLockChange]);
 
   const handleCanvasClick = () => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { socketService } from './services/socketService';
 import { voiceService } from './services/voiceService';
-import { GameStateBroadcast, HandDeal, PublicPlayer, Card as ProtoCard, GameStage as ProtoGameStage } from './shared/protocol';
+import { GameStateBroadcast, HandDeal, PublicPlayer, Card as ProtoCard, GameStage as ProtoGameStage, GameLogEntry } from './shared/protocol';
 import { PLAYER_POSITIONS } from './constants';
 import { Player, GameStage, Card } from './types';
 import GameScene from './components/GameScene';
@@ -53,7 +53,15 @@ const App: React.FC = () => {
   const [winners, setWinners] = useState<string[]>([]);
   const [isLocked, setIsLocked] = useState(false);
   const [isMobile] = useState(() => isMobileDevice());
-  const [cameraRotation, setCameraRotation] = useState({ yaw: 0, pitch: -0.3 }); // Start looking slightly down at table
+  const [cameraRotation, setCameraRotation] = useState({ yaw: 0, pitch: -0.3 });
+  
+  // New state for game UI improvements
+  const [gameLogs, setGameLogs] = useState<GameLogEntry[]>([]);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [currentTimerPlayerId, setCurrentTimerPlayerId] = useState<string>('');
+  const [waitingForDeal, setWaitingForDeal] = useState(false);
+  const [roomCode, setRoomCode] = useState<string>('');
+  const [hostId, setHostId] = useState<string>(''); // Track who is the host
 
   // Subscribe to server events
   useEffect(() => {
@@ -76,6 +84,10 @@ const App: React.FC = () => {
         setGameVariant(state.variant);
         setHighestBet(state.highestBet);
         setWinners(state.winners || []);
+        setWaitingForDeal(state.waitingForDeal || false);
+        if (state.gameLogs) {
+          setGameLogs(state.gameLogs);
+        }
       }),
 
       socketService.on('game:hand', (hand: HandDeal) => {
@@ -86,6 +98,20 @@ const App: React.FC = () => {
       socketService.on('game:new-round', () => {
         setMyHand([]);
         setWinners([]);
+      }),
+
+      socketService.on('game:timer-update', (data: { playerId: string; timeRemaining: number }) => {
+        setCurrentTimerPlayerId(data.playerId);
+        setTimeRemaining(data.timeRemaining);
+      }),
+
+      socketService.on('game:log', (log: GameLogEntry) => {
+        setGameLogs(prev => [...prev, log].slice(-50)); // Keep last 50
+      }),
+
+      socketService.on('room:state', (state) => {
+        setRoomCode(state.roomCode);
+        setHostId(state.hostId);
       }),
 
       socketService.on('player:look-update', (data: { playerId: string; yaw: number; pitch: number }) => {
@@ -152,8 +178,11 @@ const App: React.FC = () => {
     // Initialize voice chat
     try {
       await voiceService.init();
+      console.log('[App] Voice service initialized successfully');
     } catch (e) {
-      console.warn('Voice chat init failed:', e);
+      console.error('[App] Voice chat initialization failed:', e);
+      // Audio will be disabled but game continues
+      alert('Microphone access denied. Voice chat will be disabled.');
     }
   }, []);
 
@@ -168,7 +197,7 @@ const App: React.FC = () => {
 
   const handleCameraRotate = useCallback((yaw: number, pitch: number) => {
     setCameraRotation({ yaw, pitch });
-  }, []);
+  }, []); // Empty deps - this callback is stable
 
   if (screen === 'lobby') {
     return <Lobby onGameStart={handleGameStart} />;
@@ -178,11 +207,25 @@ const App: React.FC = () => {
   const myId = socketService.id;
   const me = players.find(p => p.id === myId);
 
+  // Show loading state if game screen but no players yet
+  if (screen === 'game' && players.length === 0) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center bg-gray-900 text-white">
+        <div className="text-xl">Loading game state...</div>
+      </div>
+    );
+  }
+
   const isUserTurn = me && players[currentTurnIndex]?.id === me.id && !me.isFolded && gameStage !== GameStage.SHOWDOWN;
   const callAmount = me ? highestBet - me.currentBet : 0;
   const maxRaise = pot + (callAmount * 2);
   const raiseAmount = gameVariant === 'OMAHA' ? maxRaise : highestBet * 2;
   const raiseLabel = gameVariant === 'OMAHA' ? 'POT' : 'MIN';
+  
+  // Check if current user is host
+  const isHost = myId === hostId;
+  
+  console.log('[App] Render state:', { screen, isMobile, myId, hostId, isHost, playersCount: players.length });
 
   return (
     <div className="w-full h-full relative">
@@ -205,6 +248,12 @@ const App: React.FC = () => {
           raiseAmount={raiseAmount}
           raiseLabel={raiseLabel}
           onCameraRotate={handleCameraRotate}
+          timeRemaining={isUserTurn && currentTimerPlayerId === myId ? timeRemaining : 0}
+          waitingForDeal={waitingForDeal}
+          isHost={isHost}
+          roomCode={roomCode}
+          chips={me?.chips || 0}
+          pot={pot}
         />
       ) : (
         <HUD
@@ -220,6 +269,11 @@ const App: React.FC = () => {
           onToggleVariant={handleToggleVariant}
           onLeave={() => { socketService.leaveRoom(); setScreen('lobby'); }}
           isLocked={isLocked}
+          roomCode={roomCode}
+          gameLogs={gameLogs}
+          timeRemaining={isUserTurn && currentTimerPlayerId === myId ? timeRemaining : 0}
+          waitingForDeal={waitingForDeal}
+          isHost={isHost}
         />
       )}
     </div>

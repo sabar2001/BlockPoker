@@ -1,6 +1,6 @@
 import {
   Card, GameStage, GameVariant, PlayerAction, PublicPlayer,
-  GameStateBroadcast, TableConfig, DEFAULT_TABLE_CONFIG,
+  GameStateBroadcast, TableConfig, DEFAULT_TABLE_CONFIG, GameLogEntry,
 } from '../shared/protocol.js';
 
 // --- Deck & Card Logic ---
@@ -135,18 +135,30 @@ export class GameManager {
   winners: string[] = [];
   players: ServerPlayer[] = [];
   isPlaying: boolean = false;
+  waitingForDeal: boolean = false;
+  gameLogs: GameLogEntry[] = [];
+
+  // Action timer
+  private actionTimeoutId: NodeJS.Timeout | null = null;
+  private actionTimerIntervalId: NodeJS.Timeout | null = null;
+  private actionStartTime: number = 0;
+  private actionTimeRemaining: number = 0;
 
   private roundTimer: ReturnType<typeof setTimeout> | null = null;
   private onStateChange: () => void;
   private onRoundEnd: (winners: string[], winAmount: number) => void;
   private onNewRound: () => void;
   private onDealHand: (playerId: string, cards: Card[]) => void;
+  private onTimerUpdate: (playerId: string, timeRemaining: number) => void;
+  private onLog: (log: GameLogEntry) => void;
 
   constructor(callbacks: {
     onStateChange: () => void;
     onRoundEnd: (winners: string[], winAmount: number) => void;
     onNewRound: () => void;
     onDealHand: (playerId: string, cards: Card[]) => void;
+    onTimerUpdate: (playerId: string, timeRemaining: number) => void;
+    onLog: (log: GameLogEntry) => void;
   }, tableConfig?: Partial<TableConfig>) {
     this.tableConfig = { ...DEFAULT_TABLE_CONFIG, ...tableConfig };
     this.minBet = this.tableConfig.bigBlind;
@@ -154,6 +166,8 @@ export class GameManager {
     this.onRoundEnd = callbacks.onRoundEnd;
     this.onNewRound = callbacks.onNewRound;
     this.onDealHand = callbacks.onDealHand;
+    this.onTimerUpdate = callbacks.onTimerUpdate;
+    this.onLog = callbacks.onLog;
   }
 
   updateConfig(config: Partial<TableConfig>): void {
@@ -179,7 +193,7 @@ export class GameManager {
       name,
       chips,
       hand: [],
-      isFolded: false,
+      isFolded: this.isPlaying && !this.waitingForDeal, // If joining mid-game, mark as folded unless waiting for deal
       isAllIn: false,
       currentBet: 0,
       seatIndex,
@@ -188,10 +202,11 @@ export class GameManager {
       lookYaw: 0,
       lookPitch: 0,
       isSpeaking: false,
-      isReady: false,
+      isReady: this.isPlaying, // Auto-ready if joining mid-game
       isConnected: true,
     };
     this.players.push(player);
+    console.log(`[GameManager] Player ${name} (${id}) joined. isPlaying=${this.isPlaying}, waitingForDeal=${this.waitingForDeal}, isFolded=${player.isFolded}`);
     return player;
   }
 
@@ -234,6 +249,8 @@ export class GameManager {
     this.highestBet = this.tableConfig.bigBlind;
     this.minBet = this.tableConfig.bigBlind;
     this.winners = [];
+    this.waitingForDeal = false;
+    this.clearActionTimer();
 
     for (const p of this.players) {
       p.hand = [];
@@ -250,6 +267,8 @@ export class GameManager {
       this.onStateChange();
       return;
     }
+
+    this.addLog('deal', `New ${this.tableConfig.variant} round started`);
 
     // Deal
     const cardsPerPlayer = this.tableConfig.variant === 'OMAHA' ? 4 : 2;
@@ -276,6 +295,8 @@ export class GameManager {
       this.pot = sbAmount + bbAmount;
       this.lastAggressorIndex = bbIdx;
       this.currentTurnIndex = this.findNextActive(bbIdx);
+
+      this.addLog('blinds', `${this.players[sbIdx].name} posts SB $${sbAmount}, ${this.players[bbIdx].name} posts BB $${bbAmount}`);
     } else {
       // Solo play: skip blinds, start at index 0
       this.pot = 0;
@@ -285,6 +306,7 @@ export class GameManager {
 
     this.onNewRound();
     this.onStateChange();
+    this.startActionTimer();
   }
 
   processAction(playerId: string, action: PlayerAction, amount?: number): boolean {
@@ -294,10 +316,12 @@ export class GameManager {
     const player = this.players[playerIdx];
     if (player.isFolded || player.isAllIn || this.stage === GameStage.SHOWDOWN) return false;
 
+    this.clearActionTimer();
     player.hasActed = true;
 
     if (action === 'fold') {
       player.isFolded = true;
+      this.addLog('action', `${player.name} folds`, player.id);
     } else if (action === 'call') {
       const callAmt = this.highestBet - player.currentBet;
       const actualBet = Math.min(player.chips, callAmt);
@@ -305,6 +329,12 @@ export class GameManager {
       player.currentBet += actualBet;
       this.pot += actualBet;
       if (player.chips === 0) player.isAllIn = true;
+      
+      if (callAmt === 0) {
+        this.addLog('action', `${player.name} checks`, player.id);
+      } else {
+        this.addLog('action', `${player.name} calls $${actualBet}`, player.id);
+      }
     } else if (action === 'raise') {
       const raiseTotal = amount || (this.highestBet * 2);
       const needed = raiseTotal - player.currentBet;
@@ -323,6 +353,8 @@ export class GameManager {
           }
         }
       }
+      
+      this.addLog('action', `${player.name} raises to $${player.currentBet}`, player.id);
     }
 
     this.onStateChange();
@@ -348,6 +380,7 @@ export class GameManager {
   private advanceTurn(): void {
     this.currentTurnIndex = this.findNextActive(this.currentTurnIndex);
     this.onStateChange();
+    this.startActionTimer();
   }
 
   private advanceStage(): void {
@@ -358,12 +391,15 @@ export class GameManager {
     if (this.stage === GameStage.PREFLOP) {
       this.stage = GameStage.FLOP;
       this.communityCards = this.deck.splice(0, 3);
+      this.addLog('stage', 'Flop dealt');
     } else if (this.stage === GameStage.FLOP) {
       this.stage = GameStage.TURN;
       this.communityCards.push(this.deck.splice(0, 1)[0]);
+      this.addLog('stage', 'Turn dealt');
     } else if (this.stage === GameStage.TURN) {
       this.stage = GameStage.RIVER;
       this.communityCards.push(this.deck.splice(0, 1)[0]);
+      this.addLog('stage', 'River dealt');
     } else if (this.stage === GameStage.RIVER) {
       this.handleShowdown();
       return;
@@ -375,6 +411,7 @@ export class GameManager {
     if (canAct.length <= 1) { this.runOutBoard(); return; }
 
     this.onStateChange();
+    this.startActionTimer();
   }
 
   private runOutBoard(): void {
@@ -387,6 +424,7 @@ export class GameManager {
   }
 
   private handleShowdown(): void {
+    this.clearActionTimer();
     this.stage = GameStage.SHOWDOWN;
     const active = this.players.filter(p => !p.isFolded);
 
@@ -394,6 +432,7 @@ export class GameManager {
       const winner = active[0];
       winner.chips += this.pot;
       this.winners = [winner.id];
+      this.addLog('winner', `${winner.name} wins $${this.pot}`, winner.id);
       this.onRoundEnd([winner.id], this.pot);
     } else {
       // Evaluate hands to determine winner
@@ -417,18 +456,28 @@ export class GameManager {
       }
 
       this.winners = winnerIds;
+      
+      const winnerNames = winnerIds.map(id => this.players.find(p => p.id === id)?.name).filter(Boolean).join(', ');
+      if (winnerIds.length === 1) {
+        this.addLog('winner', `${winnerNames} wins $${winAmount}`, winnerIds[0]);
+      } else {
+        this.addLog('winner', `${winnerNames} split the pot ($${winAmount} each)`);
+      }
+      
       this.onRoundEnd(winnerIds, winAmount);
     }
 
     this.onStateChange();
 
+    // Set waiting for deal instead of auto-starting
     this.roundTimer = setTimeout(() => {
       this.dealerIndex = this.findNextActive(this.dealerIndex);
       this.players = this.players.filter(p => p.isConnected);
 
       const alive = this.players.filter(p => p.chips > 0 && p.isConnected);
-      if (alive.length >= 2) {
-        this.startNewRound();
+      if (alive.length >= 1) {
+        this.waitingForDeal = true;
+        this.onStateChange();
       } else {
         this.isPlaying = false;
         this.onStateChange();
@@ -477,6 +526,8 @@ export class GameManager {
       players: this.getPublicPlayers(),
       variant: this.tableConfig.variant,
       winners: this.winners.length > 0 ? this.winners : undefined,
+      waitingForDeal: this.waitingForDeal,
+      gameLogs: this.gameLogs.slice(-20), // Last 20 logs
     };
   }
 
@@ -506,7 +557,69 @@ export class GameManager {
     if (p) p.isSpeaking = isSpeaking;
   }
 
+  // --- Game Log Helpers ---
+  private addLog(type: GameLogEntry['type'], message: string, playerId?: string): void {
+    const log: GameLogEntry = {
+      id: `${Date.now()}-${Math.random()}`,
+      timestamp: Date.now(),
+      type,
+      message,
+      playerId,
+      playerColor: playerId ? this.players.find(p => p.id === playerId)?.color : undefined,
+    };
+    this.gameLogs.push(log);
+    if (this.gameLogs.length > 50) {
+      this.gameLogs.shift();
+    }
+    this.onLog(log);
+  }
+
+  // --- Action Timer Helpers ---
+  private startActionTimer(): void {
+    this.clearActionTimer();
+    
+    const currentPlayer = this.players[this.currentTurnIndex];
+    if (!currentPlayer || currentPlayer.isFolded || currentPlayer.isAllIn) {
+      return;
+    }
+
+    this.actionStartTime = Date.now();
+    this.actionTimeRemaining = this.tableConfig.actionTimeout;
+    
+    // Broadcast timer updates every second
+    this.actionTimerIntervalId = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - this.actionStartTime) / 1000);
+      this.actionTimeRemaining = Math.max(0, this.tableConfig.actionTimeout - elapsed);
+      this.onTimerUpdate(currentPlayer.id, this.actionTimeRemaining);
+      
+      if (this.actionTimeRemaining === 0) {
+        this.clearActionTimer();
+      }
+    }, 1000);
+
+    // Set timeout to auto-fold
+    this.actionTimeoutId = setTimeout(() => {
+      if (this.currentTurnIndex !== -1 && this.players[this.currentTurnIndex]?.id === currentPlayer.id) {
+        this.addLog('timeout', `${currentPlayer.name} timed out and folded`, currentPlayer.id);
+        this.processAction(currentPlayer.id, 'fold');
+      }
+    }, this.tableConfig.actionTimeout * 1000);
+  }
+
+  private clearActionTimer(): void {
+    if (this.actionTimeoutId) {
+      clearTimeout(this.actionTimeoutId);
+      this.actionTimeoutId = null;
+    }
+    if (this.actionTimerIntervalId) {
+      clearInterval(this.actionTimerIntervalId);
+      this.actionTimerIntervalId = null;
+    }
+    this.actionTimeRemaining = 0;
+  }
+
   cleanup(): void {
     if (this.roundTimer) clearTimeout(this.roundTimer);
+    this.clearActionTimer();
   }
 }

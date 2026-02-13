@@ -31,7 +31,19 @@ class VoiceService {
   private peerPositions: Map<string, [number, number, number]> = new Map();
 
   async init(): Promise<void> {
+    // Check browser compatibility
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.error('[VoiceService] getUserMedia not supported in this browser');
+      throw new Error('Microphone not supported');
+    }
+
     this.audioContext = new AudioContext();
+
+    // Handle AudioContext suspended state (common on mobile browsers)
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+      console.log('[VoiceService] AudioContext resumed from suspended state');
+    }
 
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -41,9 +53,10 @@ class VoiceService {
           autoGainControl: true,
         },
       });
-    } catch (e) {
-      console.warn('[Voice] Microphone access denied:', e);
-      return;
+    } catch (err) {
+      const error = err as Error;
+      console.error('[VoiceService] Microphone access failed:', error.message);
+      throw error; // Re-throw so caller knows initialization failed
     }
 
     // Set up signaling listeners

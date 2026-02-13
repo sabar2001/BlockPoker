@@ -9,6 +9,12 @@ interface MobileControlsProps {
   raiseAmount: number;
   raiseLabel: string;
   onCameraRotate: (yaw: number, pitch: number) => void;
+  timeRemaining?: number;
+  waitingForDeal?: boolean;
+  isHost?: boolean;
+  roomCode?: string;
+  chips?: number;
+  pot?: number;
 }
 
 const EMOTES: { emote: EmoteType; icon: string }[] = [
@@ -21,10 +27,18 @@ const EMOTES: { emote: EmoteType; icon: string }[] = [
 ];
 
 export const MobileControls: React.FC<MobileControlsProps> = ({
-  onAction, isUserTurn, callAmount, raiseAmount, raiseLabel, onCameraRotate
+  onAction, isUserTurn, callAmount, raiseAmount, raiseLabel, onCameraRotate,
+  timeRemaining = 0, waitingForDeal = false, isHost = false, roomCode = '', chips = 0, pot = 0
 }) => {
   const [startTouch, setStartTouch] = useState<{ x: number; y: number } | null>(null);
-  const rotation = useRef({ yaw: 0, pitch: 0 });
+  const rotation = useRef({ yaw: 0, pitch: -0.3 }); // Initialize with correct starting pitch
+  
+  // Initialize camera rotation on mount (only once)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    console.log('[MobileControls] Mounted, initializing camera rotation');
+    onCameraRotate(0, -0.3);
+  }, []); // Empty deps - only run once on mount
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length > 0) {
@@ -53,6 +67,12 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   const handleTouchEnd = () => {
     setStartTouch(null);
   };
+  
+  const getTimerColor = () => {
+    if (timeRemaining > 15) return 'text-green-400';
+    if (timeRemaining > 5) return 'text-yellow-400';
+    return 'text-red-400 animate-pulse';
+  };
 
   return (
     <>
@@ -69,6 +89,41 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           userSelect: 'none',
         }}
       />
+      
+      {/* Top HUD Info */}
+      <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none font-[VT323]" style={{ zIndex: 40 }}>
+        <div className="bg-black/70 px-3 py-2 border-l-4 border-green-500">
+          {roomCode && (
+            <div className="text-yellow-300 text-lg font-mono">ROOM: {roomCode}</div>
+          )}
+          <div className="text-white text-xl">CHIPS: ${chips}</div>
+        </div>
+        <div className="bg-black/70 px-3 py-2 border-r-4 border-yellow-500">
+          <div className="text-yellow-400 text-xl">POT: ${pot}</div>
+        </div>
+      </div>
+      
+      {/* Timer Display - Top Center */}
+      {isUserTurn && timeRemaining > 0 && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2" style={{ zIndex: 45 }}>
+          <div className={`text-6xl font-bold ${getTimerColor()} font-[VT323] bg-black/70 px-6 py-2 rounded-lg`}>
+            {timeRemaining}s
+          </div>
+        </div>
+      )}
+      
+      {/* Deal Button - Center when waiting */}
+      {isHost && waitingForDeal && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto" style={{ zIndex: 60 }}>
+          <button
+            onClick={() => socketService.dealNextRound()}
+            onTouchStart={(e) => { e.stopPropagation(); socketService.dealNextRound(); }}
+            className="bg-green-900 text-white text-3xl px-12 py-6 rounded-lg border-4 border-green-500 active:bg-green-800 font-[VT323] animate-pulse"
+          >
+            DEAL NEXT HAND
+          </button>
+        </div>
+      )}
       
       {/* Action Buttons - Bottom right, thumb-friendly zone */}
       {isUserTurn && (
@@ -109,11 +164,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       </div>
 
       {/* Mobile Start Overlay */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none" style={{ zIndex: 2 }}>
-        <div className="text-white text-lg bg-black/50 px-4 py-2 rounded">
-          Swipe to look around
+      {!isUserTurn && !waitingForDeal && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none" style={{ zIndex: 2 }}>
+          <div className="text-white text-lg bg-black/50 px-4 py-2 rounded">
+            Swipe to look around
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 };

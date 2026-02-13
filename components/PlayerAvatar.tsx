@@ -44,7 +44,11 @@ const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ player, isUser, currentTurn
   if (isUser) return null;
 
   return (
-    <group ref={groupRef} position={new THREE.Vector3(...player.position)}>
+    <group ref={groupRef} position={new THREE.Vector3(
+      player.position[0],
+      0.4, // Sitting height at table level
+      player.position[2]
+    )}>
       {/* Torso */}
       <mesh position={[0, 0.5, 0]} castShadow>
         <boxGeometry args={[0.8, 0.9, 0.5]} />

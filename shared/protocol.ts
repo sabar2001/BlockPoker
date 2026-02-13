@@ -27,6 +27,7 @@ export interface TableConfig {
   smallBlind: number;
   bigBlind: number;
   variant: GameVariant;
+  actionTimeout: number; // seconds per action (5-120)
 }
 
 export const DEFAULT_TABLE_CONFIG: TableConfig = {
@@ -35,7 +36,20 @@ export const DEFAULT_TABLE_CONFIG: TableConfig = {
   smallBlind: 10,
   bigBlind: 20,
   variant: 'HOLDEM',
+  actionTimeout: 30,
 };
+
+// Game log entry
+export type GameLogType = 'deal' | 'action' | 'stage' | 'winner' | 'blinds' | 'timeout';
+
+export interface GameLogEntry {
+  id: string;
+  timestamp: number;
+  type: GameLogType;
+  message: string;
+  playerId?: string;
+  playerColor?: string;
+}
 
 // Public player data (visible to everyone)
 export interface PublicPlayer {
@@ -83,6 +97,8 @@ export interface GameStateBroadcast {
   players: PublicPlayer[];
   variant: GameVariant;
   winners?: string[]; // player IDs
+  waitingForDeal?: boolean; // true when host needs to click deal
+  gameLogs?: GameLogEntry[]; // recent game logs
 }
 
 // Private hand dealt to a specific player
@@ -104,6 +120,7 @@ export interface ClientToServerEvents {
   // Game actions
   'game:start': () => void;
   'game:action': (data: { action: PlayerAction; amount?: number }) => void;
+  'game:deal': () => void; // host triggers next round
 
   // Real-time interaction
   'player:look': (data: { yaw: number; pitch: number }) => void;
@@ -130,6 +147,8 @@ export interface ServerToClientEvents {
   'game:hand': (hand: HandDeal) => void;
   'game:round-end': (data: { winners: string[]; winAmount: number }) => void;
   'game:new-round': () => void;
+  'game:timer-update': (data: { playerId: string; timeRemaining: number }) => void;
+  'game:log': (log: GameLogEntry) => void;
 
   // Real-time interaction
   'player:look-update': (data: { playerId: string; yaw: number; pitch: number }) => void;

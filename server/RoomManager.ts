@@ -47,6 +47,8 @@ export class RoomManager {
           onRoundEnd: (w, a) => { this.io.to(code).emit('game:round-end', { winners: w, winAmount: a }); room.status = 'between_rounds'; },
           onNewRound: () => { this.io.to(code).emit('game:new-round'); room.status = 'playing'; },
           onDealHand: (pid, cards) => this.io.to(pid).emit('game:hand', { cards }),
+          onTimerUpdate: (pid, time) => this.io.to(code).emit('game:timer-update', { playerId: pid, timeRemaining: time }),
+          onLog: (log) => this.io.to(code).emit('game:log', log),
         }, tableConfig),
         status: 'waiting',
       };
@@ -66,7 +68,16 @@ export class RoomManager {
       const code = data.roomCode.toUpperCase();
       const room = this.rooms.get(code);
       if (!room) { callback({ success: false, error: 'Room not found' }); return; }
-      if (room.status === 'playing') { callback({ success: false, error: 'Game in progress' }); return; }
+      
+      // Check if game is actively in a round (not waiting for deal)
+      const isActiveRound = room.game.isPlaying && !room.game.waitingForDeal;
+      console.log(`[Room] Join attempt by ${data.playerName} to ${code}: isPlaying=${room.game.isPlaying}, waitingForDeal=${room.game.waitingForDeal}, blocking=${isActiveRound}`);
+      
+      if (isActiveRound) { 
+        console.log(`[Room] ${data.playerName} blocked from joining ${code} - active round in progress`);
+        callback({ success: false, error: 'Game in progress' }); 
+        return; 
+      }
 
       this.leaveRoom(socket);
       const player = room.game.addPlayer(socket.id, data.playerName, data.buyIn);
@@ -74,7 +85,7 @@ export class RoomManager {
 
       this.playerRooms.set(socket.id, code);
       socket.join(code);
-      console.log(`[Room] ${data.playerName} joined ${code} (buy-in: ${player.chips})`);
+      console.log(`[Room] ${data.playerName} joined ${code} (buy-in: ${player.chips}, mid-game=${room.status === 'playing'})`);
       callback({ success: true });
 
       this.io.to(code).emit('room:player-joined', {
@@ -85,6 +96,9 @@ export class RoomManager {
         lookYaw: 0, lookPitch: 0, isSpeaking: false,
       });
       this.broadcastRoomState(room);
+      
+      // Send current game state to newly joined player immediately
+      socket.emit('game:state', room.game.getGameState());
     });
 
     socket.on('room:leave', () => this.leaveRoom(socket));
@@ -113,6 +127,15 @@ export class RoomManager {
         this.broadcastRoomState(room);
       } else {
         socket.emit('room:error', { message: 'Need at least 1 player to start' });
+      }
+    });
+
+    socket.on('game:deal', () => {
+      const room = this.getPlayerRoom(socket.id);
+      if (!room || room.hostId !== socket.id) return;
+      if (room.game.waitingForDeal) {
+        room.game.startNewRound();
+        room.status = 'playing';
       }
     });
 

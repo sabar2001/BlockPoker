@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 10.0.0.30",
     "build": "vite build",
     "preview": "vite preview",
     "dev:server": "cd server && npx tsx watch index.ts",

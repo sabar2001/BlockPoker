@@ -33,8 +33,9 @@ io.on('connection', (socket) => {
   roomManager.handleConnection(socket);
 });
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  🃏 PokerPov Server running on port ${PORT}`);
   console.log(`  📡 Socket.io ready for connections`);
-  console.log(`  🏥 Health check: http://localhost:${PORT}/health\n`);
+  console.log(`  🏥 Health check: http://localhost:${PORT}/health`);
+  console.log(`  🌐 LAN access: http://10.0.0.30:${PORT}\n`);
 });
