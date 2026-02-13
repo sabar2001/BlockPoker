@@ -4,29 +4,28 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 10.0.0.30",
+    "dev": "vite",
     "build": "vite build",
     "build:server": "cd server && npm install",
     "build:all": "npm run build && npm run build:server",
-    "start": "cd server && node --loader tsx index.ts",
-    "preview": "vite preview",
-    "dev:server": "cd server && npx tsx watch index.ts",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\""
+    "start": "node --loader tsx server/index.ts",
+    "preview": "vite preview"
   },
   "dependencies": {
+    "@react-three/drei": "9.102.6",
+    "@react-three/fiber": "8.15.16",
     "react": "18.2.0",
     "react-dom": "18.2.0",
+    "socket.io-client": "^4.7.5",
     "three": "0.161.0",
-    "@react-three/fiber": "8.15.16",
-    "@react-three/drei": "9.102.6",
-    "uuid": "9.0.1",
-    "socket.io-client": "^4.7.5"
+    "tsx": "^4.21.0",
+    "uuid": "9.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.1.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "concurrently": "^9.1.0"
+    "vite": "^6.2.0"
   }
 }

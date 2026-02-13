@@ -1,13 +1,13 @@
 services:
   - type: web
     name: pokerpov
-    env: node
+    runtime: node
     plan: free
     buildCommand: npm install && npm run build:all
     startCommand: npm start
     envVars:
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10000
     healthCheckPath: /health
