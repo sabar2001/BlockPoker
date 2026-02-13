@@ -13,7 +13,7 @@ export enum Rank {
 export interface Card {
   suit: Suit;
   rank: Rank;
-  value: number; // for comparison
+  value: number;
 }
 
 export interface Player {
@@ -24,13 +24,20 @@ export interface Player {
   isBot: boolean;
   isFolded: boolean;
   isAllIn: boolean;
-  currentBet: number; // Bet in the current round
-  position: [number, number, number]; // 3D position
+  currentBet: number;
+  position: [number, number, number];
   color: string;
+  hasActed: boolean;
   chatMessage?: string;
-  lastChatTime?: number;
-  hasActed: boolean; // Track if player acted in current street
-  lastAudioData?: string; // Base64 PCM audio data
+  // Multiplayer: real-time look direction
+  lookYaw?: number;
+  lookPitch?: number;
+  // Multiplayer: voice activity
+  isSpeaking?: boolean;
+  // Multiplayer: emotes
+  emote?: string;
+  // Multiplayer: ready state
+  isReady?: boolean;
 }
 
 export enum GameStage {
@@ -53,6 +60,6 @@ export interface GameState {
   dealerIndex: number;
   highestBet: number;
   minBet: number;
-  lastAggressorIndex: number; // To track when a round of betting ends
+  lastAggressorIndex: number;
   winners: Player[];
 }
