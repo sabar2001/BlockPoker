@@ -8,6 +8,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: development
+      - key: VITE_SERVER_URL
+        value: https://pokerpov-wocm.onrender.com
       - key: PORT
         value: 10000
     healthCheckPath: /health

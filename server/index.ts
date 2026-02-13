@@ -36,12 +36,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
       'http://localhost:5173',
       'http://127.0.0.1:3000',
       'http://10.0.0.30:3000',
-      // Render deployments
-      /^https:\/\/.*\.onrender\.com$/,
-      // Vercel deployments (if you want to split later)
-      /^https:\/\/.*\.vercel\.app$/,
-      // Add your custom domain here when you get one
-      // 'https://your-domain.com'
+      'https://pokerpov-wocm.onrender.com', // Add the explicit HTTPS URL
+      /\.onrender\.com$/,                    // Simplified regex
     ],
     methods: ['GET', 'POST'],
     credentials: true,

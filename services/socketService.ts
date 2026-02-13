@@ -19,8 +19,9 @@ class SocketService {
     if (this.socket?.connected) return this.socket;
 
     this.socket = io(SERVER_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
       autoConnect: true,
+      withCredentials: true,                // Matches your server-side config
     }) as TypedSocket;
 
     // Wire up events to local listeners
