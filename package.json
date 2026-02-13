@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite --host 10.0.0.30",
     "build": "vite build",
+    "build:server": "cd server && npm install",
+    "build:all": "npm run build && npm run build:server",
+    "start": "cd server && node --loader tsx index.ts",
     "preview": "vite preview",
     "dev:server": "cd server && npx tsx watch index.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\""

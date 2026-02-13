@@ -7,7 +7,9 @@ import {
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+// In production (Render), use the same origin. In development, use localhost:3001
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 
+  (import.meta.env.PROD ? window.location.origin : 'http://localhost:3001');
 
 class SocketService {
   private socket: TypedSocket | null = null;
