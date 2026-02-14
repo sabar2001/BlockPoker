@@ -49,12 +49,6 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   // minRaise = max(2x current bet, current bet + big blind) — ensures at least BB post-flop
   const minRaise = Math.max(highestBet * 2, highestBet + bigBlind);
   const userMaxRaise = chips + currentBet;
-  // Pot-sized raise: call first, then raise by the resulting pot
-  const potAfterCall = pot + callAmount;
-  // halfPot raise TO = highestBet + half of (pot after I call)
-  const halfPot = Math.max(minRaise, highestBet + Math.floor(potAfterCall / 2));
-  // pot raise TO = highestBet + (pot after I call)
-  const potRaiseVal = Math.max(minRaise, highestBet + potAfterCall);
 
   // Reset raise slider when turn changes
   React.useEffect(() => {
@@ -199,25 +193,19 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         >
           <div className="bg-black/90 border-2 border-yellow-500 p-4 rounded-xl font-[VT323]" style={{ pointerEvents: 'auto' }}>
             <div className="text-yellow-400 text-xl mb-2 text-center">RAISE TO: ${raiseValue}</div>
-            <input
-              type="range"
-              min={minRaise}
-              max={userMaxRaise}
-              step={Math.max(1, Math.floor(minRaise / 2))}
-              value={raiseValue}
-              onChange={(e) => setRaiseValue(Number(e.target.value))}
-              onTouchStart={(e) => e.stopPropagation()}
-              className="w-full mb-3 accent-yellow-500 h-8"
-            />
-            <div className="flex gap-2 mb-3">
-              <button onClick={() => setRaiseValue(minRaise)} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(minRaise); }}
-                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>MIN ${minRaise}</button>
-              <button onClick={() => setRaiseValue(Math.min(halfPot, userMaxRaise))} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(Math.min(halfPot, userMaxRaise)); }}
-                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>1/2 ${Math.min(halfPot, userMaxRaise)}</button>
-              <button onClick={() => setRaiseValue(Math.min(potRaiseVal, userMaxRaise))} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(Math.min(potRaiseVal, userMaxRaise)); }}
-                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>POT ${Math.min(potRaiseVal, userMaxRaise)}</button>
-              <button onClick={() => setRaiseValue(userMaxRaise)} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(userMaxRaise); }}
-                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>ALL ${userMaxRaise}</button>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-gray-400 text-xs">${minRaise}</span>
+              <input
+                type="range"
+                min={minRaise}
+                max={userMaxRaise}
+                step={1}
+                value={raiseValue}
+                onChange={(e) => setRaiseValue(Number(e.target.value))}
+                onTouchStart={(e) => e.stopPropagation()}
+                className="flex-1 accent-yellow-500 h-8"
+              />
+              <span className="text-gray-400 text-xs">${userMaxRaise}</span>
             </div>
             <button
               onClick={() => { onAction('raise', raiseValue); setShowRaiseSlider(false); }}
