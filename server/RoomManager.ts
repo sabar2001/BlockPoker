@@ -137,6 +137,16 @@ export class RoomManager {
       if (room) room.game.processAction(socket.id, data.action, data.amount);
     });
 
+    socket.on('game:rebuy', (data, callback) => {
+      const room = this.getPlayerRoom(socket.id);
+      if (!room) { callback({ success: false, error: 'Not in a room' }); return; }
+      const result = room.game.rebuy(socket.id, data.amount);
+      callback(result);
+      if (result.success) {
+        this.broadcastRoomState(room);
+      }
+    });
+
     // Real-time interaction
     socket.on('player:look', (data) => {
       const room = this.getPlayerRoom(socket.id);

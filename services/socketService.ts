@@ -88,6 +88,17 @@ class SocketService {
     this.socket.emit('game:deal');
   }
 
+  // --- Rebuy ---
+  rebuy(amount: number): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      if (!this.socket?.connected) {
+        resolve({ success: false, error: 'Not connected' });
+        return;
+      }
+      this.socket.emit('game:rebuy', { amount }, resolve);
+    });
+  }
+
   // --- Game Actions ---
   sendAction(action: PlayerAction, amount?: number): void {
     if (!this.socket?.connected) {

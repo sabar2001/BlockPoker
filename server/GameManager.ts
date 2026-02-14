@@ -74,6 +74,28 @@ function combinations<T>(arr: T[], k: number): T[][] {
   return arr.flatMap((v, i) => combinations(arr.slice(i + 1), k - 1).map(c => [v, ...c]));
 }
 
+const HAND_RANK_NAMES = [
+  'High Card',
+  'Pair',
+  'Two Pair',
+  'Three of a Kind',
+  'Straight',
+  'Flush',
+  'Full House',
+  'Four of a Kind',
+  'Straight Flush',
+];
+
+function getHandName(score: number): string {
+  const handRank = Math.floor(score / (BASE ** 5));
+  // Special case: Royal Flush is a straight flush with Ace high
+  if (handRank === 8) {
+    const kicker0 = Math.floor((score % (BASE ** 5)) / (BASE ** 4));
+    if (kicker0 === 14) return 'Royal Flush';
+  }
+  return HAND_RANK_NAMES[handRank] || 'Unknown';
+}
+
 function bestHandScore(hole: Card[], community: Card[], variant: GameVariant): number {
   if (variant === 'HOLDEM') {
     let max = 0;
@@ -434,15 +456,17 @@ export class GameManager {
       const winner = active[0];
       winner.chips += this.pot;
       this.winners = [winner.id];
-      this.addLog('winner', `${winner.name} wins $${this.pot}`, winner.id);
+      this.addLog('winner', `${winner.name} wins $${this.pot} (everyone else folded)`, winner.id);
       this.onRoundEnd([winner.id], this.pot);
     } else {
       // Evaluate hands to determine winner
       let bestScore = -1;
       let winnerIds: string[] = [];
+      const playerScores = new Map<string, number>();
 
       for (const p of active) {
         const score = bestHandScore(p.hand, this.communityCards, this.tableConfig.variant);
+        playerScores.set(p.id, score);
         if (score > bestScore) {
           bestScore = score;
           winnerIds = [p.id];
@@ -458,12 +482,27 @@ export class GameManager {
       }
 
       this.winners = winnerIds;
-      
+
+      // Log each player's hand at showdown
+      for (const p of active) {
+        const score = playerScores.get(p.id) || 0;
+        const handName = getHandName(score);
+        const cards = p.hand.map(c => `${c.rank}${c.suit}`).join(' ');
+        const isWinner = winnerIds.includes(p.id);
+        this.addLog(
+          isWinner ? 'winner' : 'action',
+          `${p.name}: ${cards} (${handName})${isWinner ? ' ** WINNER **' : ''}`,
+          p.id
+        );
+      }
+
+      // Log the final result
       const winnerNames = winnerIds.map(id => this.players.find(p => p.id === id)?.name).filter(Boolean).join(', ');
+      const winningHandName = getHandName(bestScore);
       if (winnerIds.length === 1) {
-        this.addLog('winner', `${winnerNames} wins $${winAmount}`, winnerIds[0]);
+        this.addLog('winner', `${winnerNames} wins $${winAmount} with ${winningHandName}`, winnerIds[0]);
       } else {
-        this.addLog('winner', `${winnerNames} split the pot ($${winAmount} each)`);
+        this.addLog('winner', `${winnerNames} split $${this.pot} ($${winAmount} each) with ${winningHandName}`);
       }
       
       this.onRoundEnd(winnerIds, winAmount);
@@ -557,6 +596,23 @@ export class GameManager {
   setSpeaking(playerId: string, isSpeaking: boolean): void {
     const p = this.players.find(pl => pl.id === playerId);
     if (p) p.isSpeaking = isSpeaking;
+  }
+
+  // --- Rebuy ---
+  rebuy(playerId: string, amount: number): { success: boolean; error?: string } {
+    const p = this.players.find(pl => pl.id === playerId);
+    if (!p) return { success: false, error: 'Player not found' };
+    if (p.chips > 0) return { success: false, error: 'You still have chips' };
+    if (!this.waitingForDeal && this.isPlaying && this.stage !== GameStage.SHOWDOWN) {
+      return { success: false, error: 'Cannot rebuy during an active hand' };
+    }
+
+    const chips = Math.max(this.tableConfig.minBuyIn, Math.min(this.tableConfig.maxBuyIn, amount));
+    p.chips = chips;
+    p.isFolded = false;
+    this.addLog('rebuy', `${p.name} rebuys for $${chips}`, p.id);
+    this.onStateChange();
+    return { success: true };
   }
 
   // --- Game Log Helpers ---

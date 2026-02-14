@@ -11,8 +11,10 @@ import { MobileControls } from './components/MobileControls';
 import { isMobileDevice } from './utils/deviceDetection';
 
 // Convert server player data to client Player type
-function toClientPlayer(p: PublicPlayer): Player {
-  const pos = PLAYER_POSITIONS[p.seatIndex] || PLAYER_POSITIONS[0];
+// mySeatIndex is used to rotate positions so the current user always sits at PLAYER_POSITIONS[0]
+function toClientPlayer(p: PublicPlayer, mySeatIndex: number): Player {
+  const effectiveIndex = (p.seatIndex - mySeatIndex + 9) % 9;
+  const pos = PLAYER_POSITIONS[effectiveIndex] || PLAYER_POSITIONS[0];
   return {
     id: p.id,
     name: p.name,
@@ -68,10 +70,14 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubs = [
       socketService.on('game:state', (state: GameStateBroadcast) => {
-        const clientPlayers = state.players.map(toClientPlayer);
+        // Find my seat index to rotate positions so I'm always at seat 0
+        const myId = socketService.id;
+        const myServerPlayer = state.players.find(p => p.id === myId);
+        const mySeatIndex = myServerPlayer?.seatIndex ?? 0;
+
+        const clientPlayers = state.players.map(p => toClientPlayer(p, mySeatIndex));
 
         // Inject our hand into our player using ref (avoids stale closure)
-        const myId = socketService.id;
         const meIdx = clientPlayers.findIndex(p => p.id === myId);
         if (meIdx !== -1) {
           clientPlayers[meIdx].hand = myHandRef.current;
@@ -266,6 +272,8 @@ const App: React.FC = () => {
           myHand={myHand}
           communityCards={communityCards}
           isFolded={me?.isFolded || false}
+          highestBet={highestBet}
+          currentBet={me?.currentBet || 0}
         />
       ) : (
         <HUD

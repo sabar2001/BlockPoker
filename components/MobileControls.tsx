@@ -20,6 +20,8 @@ interface MobileControlsProps {
   myHand?: Card[];
   communityCards?: Card[];
   isFolded?: boolean;
+  highestBet?: number;
+  currentBet?: number;
 }
 
 const EMOTES: { emote: EmoteType; icon: string }[] = [
@@ -34,10 +36,35 @@ const EMOTES: { emote: EmoteType; icon: string }[] = [
 export const MobileControls: React.FC<MobileControlsProps> = ({
   onAction, isUserTurn, callAmount, raiseAmount, raiseLabel, onCameraRotate,
   timeRemaining = 0, waitingForDeal = false, isHost = false, roomCode = '', chips = 0, pot = 0,
-  myHand = [], communityCards = [], isFolded = false
+  myHand = [], communityCards = [], isFolded = false, highestBet = 0, currentBet = 0
 }) => {
   const [startTouch, setStartTouch] = useState<{ x: number; y: number } | null>(null);
+  const [showRaiseSlider, setShowRaiseSlider] = useState(false);
+  const [raiseValue, setRaiseValue] = useState(raiseAmount);
+  const [rebuyAmount, setRebuyAmount] = useState(1000);
+  const [rebuyError, setRebuyError] = useState('');
   const rotation = useRef({ yaw: 0, pitch: -0.3 }); // Initialize with correct starting pitch
+
+  const minRaise = Math.max(highestBet * 2, 1);
+  const userMaxRaise = chips + currentBet;
+  // Pot-sized raise: call first, then raise by the resulting pot
+  const potAfterCall = pot + callAmount;
+  const halfPot = Math.max(minRaise, highestBet + Math.floor(potAfterCall / 2));
+  const potRaiseVal = Math.max(minRaise, highestBet + potAfterCall);
+
+  // Reset raise slider when turn changes
+  React.useEffect(() => {
+    setRaiseValue(minRaise);
+    setShowRaiseSlider(false);
+  }, [isUserTurn, minRaise]);
+
+  const handleRebuy = async () => {
+    setRebuyError('');
+    const result = await socketService.rebuy(rebuyAmount);
+    if (!result.success) {
+      setRebuyError(result.error || 'Rebuy failed');
+    }
+  };
   
   // Initialize camera rotation on mount (only once)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,6 +162,71 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
       )}
       
+      {/* Rebuy UI - shown when player has 0 chips */}
+      {chips === 0 && (
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ zIndex: 65 }}>
+          <div className="bg-black/90 border-2 border-yellow-500 p-4 rounded-xl w-72 font-[VT323]" style={{ pointerEvents: 'auto' }}>
+            <div className="text-yellow-400 text-2xl mb-3 text-center">REBUY</div>
+            <input
+              type="number"
+              value={rebuyAmount}
+              onChange={(e) => setRebuyAmount(Math.max(1, Number(e.target.value)))}
+              className="bg-gray-900 border border-gray-600 text-white text-2xl px-3 py-2 w-full text-center outline-none mb-3 rounded"
+              min={1}
+              onTouchStart={(e) => e.stopPropagation()}
+            />
+            <button
+              onClick={handleRebuy}
+              onTouchStart={(e) => { e.stopPropagation(); handleRebuy(); }}
+              className="bg-yellow-800 hover:bg-yellow-700 active:bg-yellow-600 text-white text-2xl py-3 w-full border border-yellow-500 rounded-xl active:scale-95 transition-transform"
+            >
+              BUY IN ${rebuyAmount}
+            </button>
+            {rebuyError && <div className="text-red-400 text-sm mt-2 text-center">{rebuyError}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Raise Slider Panel - Above action buttons */}
+      {isUserTurn && showRaiseSlider && (
+        <div
+          className="absolute left-6 right-6"
+          style={{ bottom: 'max(120px, calc(env(safe-area-inset-bottom, 24px) + 100px))', zIndex: 55 }}
+        >
+          <div className="bg-black/90 border-2 border-yellow-500 p-4 rounded-xl font-[VT323]" style={{ pointerEvents: 'auto' }}>
+            <div className="text-yellow-400 text-xl mb-2 text-center">RAISE TO: ${raiseValue}</div>
+            <input
+              type="range"
+              min={minRaise}
+              max={userMaxRaise}
+              step={Math.max(1, Math.floor(minRaise / 2))}
+              value={raiseValue}
+              onChange={(e) => setRaiseValue(Number(e.target.value))}
+              onTouchStart={(e) => e.stopPropagation()}
+              className="w-full mb-3 accent-yellow-500 h-8"
+            />
+            <div className="flex gap-2 mb-3">
+              <button onClick={() => setRaiseValue(minRaise)} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(minRaise); }}
+                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>MIN</button>
+              <button onClick={() => setRaiseValue(Math.min(halfPot, userMaxRaise))} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(Math.min(halfPot, userMaxRaise)); }}
+                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>1/2 POT</button>
+              <button onClick={() => setRaiseValue(Math.min(potRaiseVal, userMaxRaise))} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(Math.min(potRaiseVal, userMaxRaise)); }}
+                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>POT</button>
+              <button onClick={() => setRaiseValue(userMaxRaise)} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(userMaxRaise); }}
+                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>ALL IN</button>
+            </div>
+            <button
+              onClick={() => { onAction('raise', raiseValue); setShowRaiseSlider(false); }}
+              onTouchStart={(e) => { e.stopPropagation(); onAction('raise', raiseValue); setShowRaiseSlider(false); }}
+              className="bg-yellow-800 hover:bg-yellow-700 text-white text-xl py-3 w-full border border-yellow-500 rounded-xl active:scale-95"
+              style={{ pointerEvents: 'auto' }}
+            >
+              RAISE ${raiseValue}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons - Bottom center, horizontal layout with safe areas */}
       {isUserTurn && (
         <div 
@@ -158,12 +250,12 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
             {callAmount > 0 ? `CALL ${callAmount}` : 'CHECK'}
           </button>
           <button 
-            onClick={() => onAction('raise', raiseAmount)}
-            onTouchStart={(e) => { e.stopPropagation(); onAction('raise', raiseAmount); }}
+            onClick={() => setShowRaiseSlider(prev => !prev)}
+            onTouchStart={(e) => { e.stopPropagation(); setShowRaiseSlider(prev => !prev); }}
             className="bg-yellow-900/90 backdrop-blur text-white text-2xl font-bold px-6 py-5 rounded-xl border-3 border-yellow-500 active:scale-95 transition-transform shadow-lg min-w-[140px] min-h-[70px] font-[VT323]"
             style={{ pointerEvents: 'auto' }}
           >
-            {raiseLabel} {raiseAmount}
+            RAISE
           </button>
         </div>
       )}

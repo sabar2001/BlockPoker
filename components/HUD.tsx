@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Player, Card, GameStage, GameVariant } from '../types';
 import { socketService } from '../services/socketService';
 import { EmoteType, GameLogEntry } from '../shared/protocol';
@@ -52,14 +52,54 @@ const HUD: React.FC<HUDProps> = ({
   roomCode, gameLogs, timeRemaining, waitingForDeal, isHost
 }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const [showRaiseSlider, setShowRaiseSlider] = useState(false);
+  const showRaiseSliderRef = useRef(false);
+  const [rebuyAmount, setRebuyAmount] = useState(1000);
+  const [rebuyError, setRebuyError] = useState('');
   const logRef = useRef<HTMLDivElement>(null);
+  const raiseValueRef = useRef(0);
   
   const isUserTurn = user && players[currentTurnIndex]?.id === user.id && !user.isFolded && gameState !== GameStage.SHOWDOWN;
   const callAmount = user ? minBet - user.currentBet : 0;
 
-  const maxRaise = pot + (callAmount * 2);
-  const raiseAmount = gameVariant === 'OMAHA' ? maxRaise : minBet * 2;
-  const raiseLabel = gameVariant === 'OMAHA' ? 'POT' : 'MIN';
+  // Raise bounds — amounts are "raise TO" values
+  const minRaise = Math.max(minBet * 2, 1);
+  const userMaxRaise = user ? user.chips + user.currentBet : 0;
+  // Pot-sized raise: call first, then raise by the resulting pot
+  const potAfterCall = pot + callAmount;
+  const halfPot = Math.max(minRaise, minBet + Math.floor(potAfterCall / 2));
+  const potRaise = Math.max(minRaise, minBet + potAfterCall);
+  const [raiseValue, setRaiseValue] = useState(minRaise);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    showRaiseSliderRef.current = showRaiseSlider;
+  }, [showRaiseSlider]);
+
+  useEffect(() => {
+    raiseValueRef.current = raiseValue;
+  }, [raiseValue]);
+
+  // Helper to toggle raise slider and keep ref in sync
+  const toggleRaiseSlider = useCallback(() => {
+    setShowRaiseSlider(prev => {
+      const next = !prev;
+      showRaiseSliderRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const closeRaiseSlider = useCallback(() => {
+    setShowRaiseSlider(false);
+    showRaiseSliderRef.current = false;
+  }, []);
+
+  // Reset raise slider value when turn changes
+  useEffect(() => {
+    setRaiseValue(minRaise);
+    raiseValueRef.current = minRaise;
+    closeRaiseSlider();
+  }, [currentTurnIndex, minRaise, closeRaiseSlider]);
 
   // Auto-scroll logs to bottom
   useEffect(() => {
@@ -70,23 +110,94 @@ const HUD: React.FC<HUDProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Poker actions
-      if (isUserTurn) {
-        switch (e.key) {
-          case '1': onAction('fold'); return;
-          case '2': onAction('call'); return;
-          case '3': onAction('raise', raiseAmount); return;
+      const sliderOpen = showRaiseSliderRef.current;
+
+      // When raise slider is open, number keys 4-7 are presets instead of emotes
+      if (isUserTurn && sliderOpen) {
+        const step = Math.max(1, Math.floor(minRaise / 2));
+        const bigStep = step * 5;
+
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault(); e.stopPropagation();
+          setRaiseValue(v => {
+            const next = Math.max(minRaise, v - (e.shiftKey ? bigStep : step));
+            raiseValueRef.current = next;
+            return next;
+          });
+          return;
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault(); e.stopPropagation();
+          setRaiseValue(v => {
+            const next = Math.min(userMaxRaise, v + (e.shiftKey ? bigStep : step));
+            raiseValueRef.current = next;
+            return next;
+          });
+          return;
+        }
+        if (e.key === '4') {
+          e.stopPropagation();
+          raiseValueRef.current = minRaise;
+          setRaiseValue(minRaise);
+          return;
+        }
+        if (e.key === '5') {
+          e.stopPropagation();
+          const val = Math.min(halfPot, userMaxRaise);
+          raiseValueRef.current = val;
+          setRaiseValue(val);
+          return;
+        }
+        if (e.key === '6') {
+          e.stopPropagation();
+          const val = Math.min(potRaise, userMaxRaise);
+          raiseValueRef.current = val;
+          setRaiseValue(val);
+          return;
+        }
+        if (e.key === '7') {
+          e.stopPropagation();
+          raiseValueRef.current = userMaxRaise;
+          setRaiseValue(userMaxRaise);
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault(); e.stopPropagation();
+          onAction('raise', raiseValueRef.current);
+          closeRaiseSlider();
+          return;
+        }
+        if (e.key === 'Escape') {
+          closeRaiseSlider();
+          return;
         }
       }
-      // Emotes (always available)
+
+      // Poker actions (1/2/3)
+      if (isUserTurn) {
+        if (e.key === '1') { onAction('fold'); return; }
+        if (e.key === '2') { onAction('call'); return; }
+        if (e.key === '3') { toggleRaiseSlider(); return; }
+      }
+
+      // Emotes (4-9, only when raise slider is closed)
       const emote = EMOTES.find(em => em.key === e.key);
       if (emote) {
         socketService.sendEmote(emote.emote);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isUserTurn, onAction, raiseAmount]);
+    // Use capture phase on document so we intercept keys before canvas/R3F can swallow them
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [isUserTurn, onAction, toggleRaiseSlider, closeRaiseSlider, minRaise, userMaxRaise, halfPot, potRaise]);
+
+  const handleRebuy = async () => {
+    setRebuyError('');
+    const result = await socketService.rebuy(rebuyAmount);
+    if (!result.success) {
+      setRebuyError(result.error || 'Rebuy failed');
+    }
+  };
 
   if (!user) return null;
 
@@ -104,6 +215,7 @@ const HUD: React.FC<HUDProps> = ({
       case 'stage': return 'text-green-400';
       case 'winner': return 'text-yellow-300';
       case 'timeout': return 'text-red-400';
+      case 'rebuy': return 'text-purple-400';
       default: return 'text-gray-300';
     }
   };
@@ -170,7 +282,7 @@ const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
 
-        {/* Bottom Left: Chips */}
+        {/* Bottom Left: Chips + Rebuy */}
         <div className="absolute bottom-8 left-8 flex flex-col gap-2">
           <div className="bg-black/70 p-4 border-l-8 border-green-500 w-64">
             <div className="text-green-400 text-sm mb-1">CHIPS</div>
@@ -179,6 +291,26 @@ const HUD: React.FC<HUDProps> = ({
           <div className="text-white text-2xl krunker-text drop-shadow-lg">
             BET: ${user.currentBet}
           </div>
+          {/* Rebuy UI - shown when player has 0 chips */}
+          {user.chips === 0 && (
+            <div className="bg-black/80 border-2 border-yellow-500 p-3 w-64 pointer-events-auto">
+              <div className="text-yellow-400 text-lg mb-2 krunker-text">REBUY</div>
+              <input
+                type="number"
+                value={rebuyAmount}
+                onChange={(e) => setRebuyAmount(Math.max(1, Number(e.target.value)))}
+                className="bg-gray-900 border border-gray-600 text-white text-lg px-3 py-1 w-full text-center outline-none mb-2"
+                min={1}
+              />
+              <button
+                onClick={handleRebuy}
+                className="bg-yellow-800 hover:bg-yellow-700 text-white text-xl py-2 w-full border border-yellow-500"
+              >
+                BUY IN ${rebuyAmount}
+              </button>
+              {rebuyError && <div className="text-red-400 text-sm mt-1">{rebuyError}</div>}
+            </div>
+          )}
           {/* Emote bar */}
           <div className="flex gap-1 mt-2">
             {EMOTES.map(em => (
@@ -217,7 +349,7 @@ const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
 
-        {/* Bottom Right: Actions + Timer */}
+        {/* Bottom Right: Actions + Timer + Raise Slider */}
         <div className="absolute bottom-8 right-8 flex flex-col items-end gap-2 pointer-events-auto">
           {isUserTurn ? (
             <div className="flex flex-col gap-2 items-end">
@@ -228,14 +360,50 @@ const HUD: React.FC<HUDProps> = ({
                 </div>
               )}
               <div className="text-white text-xl animate-pulse">YOUR TURN</div>
+
+              {/* Raise Slider Panel */}
+              {showRaiseSlider && (
+                <div className="bg-black/90 border-2 border-yellow-500 p-3 w-64 mb-1">
+                  <div className="text-yellow-400 text-lg mb-2 krunker-text">RAISE TO: ${raiseValue}</div>
+                  <input
+                    type="range"
+                    min={minRaise}
+                    max={userMaxRaise}
+                    step={Math.max(1, Math.floor(minRaise / 2))}
+                    value={raiseValue}
+                    onChange={(e) => setRaiseValue(Number(e.target.value))}
+                    className="w-full mb-2 accent-yellow-500"
+                  />
+                  <div className="flex gap-1 flex-wrap">
+                    <button onClick={() => { raiseValueRef.current = minRaise; setRaiseValue(minRaise); }}
+                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[4] MIN</button>
+                    <button onClick={() => { const v = Math.min(halfPot, userMaxRaise); raiseValueRef.current = v; setRaiseValue(v); }}
+                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[5] 1/2</button>
+                    <button onClick={() => { const v = Math.min(potRaise, userMaxRaise); raiseValueRef.current = v; setRaiseValue(v); }}
+                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[6] POT</button>
+                    <button onClick={() => { raiseValueRef.current = userMaxRaise; setRaiseValue(userMaxRaise); }}
+                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[7] ALL</button>
+                  </div>
+                  <button
+                    onClick={() => { onAction('raise', raiseValueRef.current); setShowRaiseSlider(false); showRaiseSliderRef.current = false; }}
+                    className="bg-yellow-800 hover:bg-yellow-700 text-white text-xl py-2 w-full mt-2 border border-yellow-500"
+                  >
+                    [ENTER] RAISE ${raiseValue}
+                  </button>
+                  <div className="text-gray-500 text-xs mt-1 text-center">
+                    Arrows: adjust | Shift+Arrows: big steps
+                  </div>
+                </div>
+              )}
+
               <button onClick={() => onAction('fold')} className="bg-red-900/90 text-red-100 border-2 border-red-500 px-6 py-2 text-2xl hover:bg-red-800 w-48 text-right">
                 [1] FOLD
               </button>
               <button onClick={() => onAction('call')} className="bg-blue-900/90 text-blue-100 border-2 border-blue-500 px-6 py-2 text-2xl hover:bg-blue-800 w-48 text-right">
                 [2] {callAmount > 0 ? `CALL ${callAmount}` : 'CHECK'}
               </button>
-              <button onClick={() => onAction('raise', raiseAmount)} className="bg-yellow-900/90 text-yellow-100 border-2 border-yellow-500 px-6 py-2 text-2xl hover:bg-yellow-800 w-48 text-right">
-                [3] {raiseLabel}
+              <button onClick={() => setShowRaiseSlider(prev => !prev)} className="bg-yellow-900/90 text-yellow-100 border-2 border-yellow-500 px-6 py-2 text-2xl hover:bg-yellow-800 w-48 text-right">
+                [3] RAISE
               </button>
             </div>
           ) : (
