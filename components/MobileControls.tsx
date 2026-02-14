@@ -22,6 +22,7 @@ interface MobileControlsProps {
   isFolded?: boolean;
   highestBet?: number;
   currentBet?: number;
+  bigBlind?: number;
 }
 
 const EMOTES: { emote: EmoteType; icon: string }[] = [
@@ -36,7 +37,7 @@ const EMOTES: { emote: EmoteType; icon: string }[] = [
 export const MobileControls: React.FC<MobileControlsProps> = ({
   onAction, isUserTurn, callAmount, raiseAmount, raiseLabel, onCameraRotate,
   timeRemaining = 0, waitingForDeal = false, isHost = false, roomCode = '', chips = 0, pot = 0,
-  myHand = [], communityCards = [], isFolded = false, highestBet = 0, currentBet = 0
+  myHand = [], communityCards = [], isFolded = false, highestBet = 0, currentBet = 0, bigBlind = 20
 }) => {
   const [startTouch, setStartTouch] = useState<{ x: number; y: number } | null>(null);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
@@ -45,11 +46,14 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   const [rebuyError, setRebuyError] = useState('');
   const rotation = useRef({ yaw: 0, pitch: -0.3 }); // Initialize with correct starting pitch
 
-  const minRaise = Math.max(highestBet * 2, 1);
+  // minRaise = max(2x current bet, current bet + big blind) — ensures at least BB post-flop
+  const minRaise = Math.max(highestBet * 2, highestBet + bigBlind);
   const userMaxRaise = chips + currentBet;
   // Pot-sized raise: call first, then raise by the resulting pot
   const potAfterCall = pot + callAmount;
+  // halfPot raise TO = highestBet + half of (pot after I call)
   const halfPot = Math.max(minRaise, highestBet + Math.floor(potAfterCall / 2));
+  // pot raise TO = highestBet + (pot after I call)
   const potRaiseVal = Math.max(minRaise, highestBet + potAfterCall);
 
   // Reset raise slider when turn changes
@@ -207,13 +211,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
             />
             <div className="flex gap-2 mb-3">
               <button onClick={() => setRaiseValue(minRaise)} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(minRaise); }}
-                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>MIN</button>
+                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>MIN ${minRaise}</button>
               <button onClick={() => setRaiseValue(Math.min(halfPot, userMaxRaise))} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(Math.min(halfPot, userMaxRaise)); }}
-                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>1/2 POT</button>
+                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>1/2 ${Math.min(halfPot, userMaxRaise)}</button>
               <button onClick={() => setRaiseValue(Math.min(potRaiseVal, userMaxRaise))} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(Math.min(potRaiseVal, userMaxRaise)); }}
-                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>POT</button>
+                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>POT ${Math.min(potRaiseVal, userMaxRaise)}</button>
               <button onClick={() => setRaiseValue(userMaxRaise)} onTouchStart={(e) => { e.stopPropagation(); setRaiseValue(userMaxRaise); }}
-                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>ALL IN</button>
+                className="bg-gray-800 text-white text-sm py-2 flex-1 border border-gray-600 rounded active:scale-95" style={{ pointerEvents: 'auto' }}>ALL ${userMaxRaise}</button>
             </div>
             <button
               onClick={() => { onAction('raise', raiseValue); setShowRaiseSlider(false); }}

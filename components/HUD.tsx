@@ -18,6 +18,7 @@ interface HUDProps {
   onLeave?: () => void;
   isLocked: boolean;
   isMobile?: boolean;
+  bigBlind: number;
   roomCode: string;
   gameLogs: GameLogEntry[];
   timeRemaining: number;
@@ -49,7 +50,7 @@ const EMOTES: { key: string; emote: EmoteType; icon: string }[] = [
 
 const HUD: React.FC<HUDProps> = ({
   user, gameState, gameVariant, currentTurnIndex, players, communityCards, pot, onAction, minBet, onToggleVariant, onLeave, isLocked, isMobile,
-  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost
+  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
@@ -60,18 +61,26 @@ const HUD: React.FC<HUDProps> = ({
   const raiseValueRef = useRef(0);
   
   const isUserTurn = user && players[currentTurnIndex]?.id === user.id && !user.isFolded && gameState !== GameStage.SHOWDOWN;
-  const callAmount = user ? minBet - user.currentBet : 0;
+  const callAmount = user ? Math.max(0, minBet - user.currentBet) : 0;
 
   // Raise bounds — amounts are "raise TO" values
-  const minRaise = Math.max(minBet * 2, 1);
+  // minRaise = max(2x current bet, current bet + big blind) — ensures at least BB post-flop
+  const minRaise = Math.max(minBet * 2, minBet + bigBlind);
   const userMaxRaise = user ? user.chips + user.currentBet : 0;
   // Pot-sized raise: call first, then raise by the resulting pot
   const potAfterCall = pot + callAmount;
+  // halfPot raise TO = highestBet + half of (pot after I call)
   const halfPot = Math.max(minRaise, minBet + Math.floor(potAfterCall / 2));
+  // pot raise TO = highestBet + (pot after I call)
   const potRaise = Math.max(minRaise, minBet + potAfterCall);
   const [raiseValue, setRaiseValue] = useState(minRaise);
 
-  // Keep refs in sync with state
+  // Keep refs in sync with state so keyboard handlers never read stale values
+  const minRaiseRef = useRef(minRaise);
+  const halfPotRef = useRef(halfPot);
+  const potRaiseRef = useRef(potRaise);
+  const userMaxRaiseRef = useRef(userMaxRaise);
+
   useEffect(() => {
     showRaiseSliderRef.current = showRaiseSlider;
   }, [showRaiseSlider]);
@@ -79,6 +88,13 @@ const HUD: React.FC<HUDProps> = ({
   useEffect(() => {
     raiseValueRef.current = raiseValue;
   }, [raiseValue]);
+
+  useEffect(() => {
+    minRaiseRef.current = minRaise;
+    halfPotRef.current = halfPot;
+    potRaiseRef.current = potRaise;
+    userMaxRaiseRef.current = userMaxRaise;
+  }, [minRaise, halfPot, potRaise, userMaxRaise]);
 
   // Helper to toggle raise slider and keep ref in sync
   const toggleRaiseSlider = useCallback(() => {
@@ -94,12 +110,14 @@ const HUD: React.FC<HUDProps> = ({
     showRaiseSliderRef.current = false;
   }, []);
 
-  // Reset raise slider value when turn changes
+  // Reset raise slider value when turn changes (only on turn change, not on minRaise change)
   useEffect(() => {
-    setRaiseValue(minRaise);
-    raiseValueRef.current = minRaise;
+    const mr = minRaiseRef.current;
+    setRaiseValue(mr);
+    raiseValueRef.current = mr;
     closeRaiseSlider();
-  }, [currentTurnIndex, minRaise, closeRaiseSlider]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTurnIndex, closeRaiseSlider]);
 
   // Auto-scroll logs to bottom
   useEffect(() => {
@@ -112,15 +130,21 @@ const HUD: React.FC<HUDProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       const sliderOpen = showRaiseSliderRef.current;
 
+      // Read latest values from refs (avoids stale closures)
+      const mr = minRaiseRef.current;
+      const hp = halfPotRef.current;
+      const pr = potRaiseRef.current;
+      const umr = userMaxRaiseRef.current;
+
       // When raise slider is open, number keys 4-7 are presets instead of emotes
       if (isUserTurn && sliderOpen) {
-        const step = Math.max(1, Math.floor(minRaise / 2));
+        const step = Math.max(1, Math.floor(mr / 2));
         const bigStep = step * 5;
 
         if (e.key === 'ArrowLeft') {
           e.preventDefault(); e.stopPropagation();
           setRaiseValue(v => {
-            const next = Math.max(minRaise, v - (e.shiftKey ? bigStep : step));
+            const next = Math.max(mr, v - (e.shiftKey ? bigStep : step));
             raiseValueRef.current = next;
             return next;
           });
@@ -129,7 +153,7 @@ const HUD: React.FC<HUDProps> = ({
         if (e.key === 'ArrowRight') {
           e.preventDefault(); e.stopPropagation();
           setRaiseValue(v => {
-            const next = Math.min(userMaxRaise, v + (e.shiftKey ? bigStep : step));
+            const next = Math.min(umr, v + (e.shiftKey ? bigStep : step));
             raiseValueRef.current = next;
             return next;
           });
@@ -137,32 +161,37 @@ const HUD: React.FC<HUDProps> = ({
         }
         if (e.key === '4') {
           e.stopPropagation();
-          raiseValueRef.current = minRaise;
-          setRaiseValue(minRaise);
+          console.log('[RAISE] MIN preset:', mr);
+          raiseValueRef.current = mr;
+          setRaiseValue(mr);
           return;
         }
         if (e.key === '5') {
           e.stopPropagation();
-          const val = Math.min(halfPot, userMaxRaise);
+          const val = Math.min(hp, umr);
+          console.log('[RAISE] HALF POT preset:', val, '(halfPot=', hp, 'maxRaise=', umr, ')');
           raiseValueRef.current = val;
           setRaiseValue(val);
           return;
         }
         if (e.key === '6') {
           e.stopPropagation();
-          const val = Math.min(potRaise, userMaxRaise);
+          const val = Math.min(pr, umr);
+          console.log('[RAISE] POT preset:', val, '(potRaise=', pr, 'maxRaise=', umr, ')');
           raiseValueRef.current = val;
           setRaiseValue(val);
           return;
         }
         if (e.key === '7') {
           e.stopPropagation();
-          raiseValueRef.current = userMaxRaise;
-          setRaiseValue(userMaxRaise);
+          console.log('[RAISE] ALL IN preset:', umr);
+          raiseValueRef.current = umr;
+          setRaiseValue(umr);
           return;
         }
         if (e.key === 'Enter') {
           e.preventDefault(); e.stopPropagation();
+          console.log('[RAISE] Confirming raise to:', raiseValueRef.current);
           onAction('raise', raiseValueRef.current);
           closeRaiseSlider();
           return;
@@ -189,7 +218,7 @@ const HUD: React.FC<HUDProps> = ({
     // Use capture phase on document so we intercept keys before canvas/R3F can swallow them
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [isUserTurn, onAction, toggleRaiseSlider, closeRaiseSlider, minRaise, userMaxRaise, halfPot, potRaise]);
+  }, [isUserTurn, onAction, toggleRaiseSlider, closeRaiseSlider]);
 
   const handleRebuy = async () => {
     setRebuyError('');
@@ -376,13 +405,13 @@ const HUD: React.FC<HUDProps> = ({
                   />
                   <div className="flex gap-1 flex-wrap">
                     <button onClick={() => { raiseValueRef.current = minRaise; setRaiseValue(minRaise); }}
-                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[4] MIN</button>
+                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[4] MIN ${minRaise}</button>
                     <button onClick={() => { const v = Math.min(halfPot, userMaxRaise); raiseValueRef.current = v; setRaiseValue(v); }}
-                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[5] 1/2</button>
+                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[5] 1/2 ${Math.min(halfPot, userMaxRaise)}</button>
                     <button onClick={() => { const v = Math.min(potRaise, userMaxRaise); raiseValueRef.current = v; setRaiseValue(v); }}
-                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[6] POT</button>
+                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[6] POT ${Math.min(potRaise, userMaxRaise)}</button>
                     <button onClick={() => { raiseValueRef.current = userMaxRaise; setRaiseValue(userMaxRaise); }}
-                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[7] ALL</button>
+                      className="bg-gray-800 hover:bg-gray-700 text-white text-xs px-2 py-1 border border-gray-600 flex-1">[7] ALL ${userMaxRaise}</button>
                   </div>
                   <button
                     onClick={() => { onAction('raise', raiseValueRef.current); setShowRaiseSlider(false); showRaiseSliderRef.current = false; }}

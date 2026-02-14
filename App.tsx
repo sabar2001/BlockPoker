@@ -53,6 +53,7 @@ const App: React.FC = () => {
   const [gameStage, setGameStage] = useState<GameStage>(GameStage.PREFLOP);
   const [gameVariant, setGameVariant] = useState<'HOLDEM' | 'OMAHA'>('HOLDEM');
   const [highestBet, setHighestBet] = useState(0);
+  const [bigBlind, setBigBlind] = useState(20);
   const [winners, setWinners] = useState<string[]>([]);
   const [isLocked, setIsLocked] = useState(false);
   const [isMobile] = useState(() => isMobileDevice());
@@ -90,6 +91,7 @@ const App: React.FC = () => {
         setGameStage(state.stage as number as GameStage);
         setGameVariant(state.variant);
         setHighestBet(state.highestBet);
+        setBigBlind(state.minBet || 20);
         setWinners(state.winners || []);
         setWaitingForDeal(state.waitingForDeal || false);
         if (state.gameLogs) {
@@ -274,6 +276,7 @@ const App: React.FC = () => {
           isFolded={me?.isFolded || false}
           highestBet={highestBet}
           currentBet={me?.currentBet || 0}
+          bigBlind={bigBlind}
         />
       ) : (
         <HUD
@@ -286,6 +289,7 @@ const App: React.FC = () => {
           pot={pot}
           onAction={handleUserAction}
           minBet={highestBet}
+          bigBlind={bigBlind}
           onToggleVariant={handleToggleVariant}
           onLeave={() => { socketService.leaveRoom(); setScreen('lobby'); }}
           isLocked={isLocked}
