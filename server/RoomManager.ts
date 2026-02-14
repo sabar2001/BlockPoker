@@ -147,6 +147,19 @@ export class RoomManager {
       }
     });
 
+    socket.on('game:show-cards', () => {
+      const room = this.getPlayerRoom(socket.id);
+      if (!room) return;
+      const result = room.game.showCards(socket.id);
+      if (result) {
+        this.io.to(room.code).emit('game:cards-revealed', {
+          playerId: socket.id,
+          playerName: result.playerName,
+          cards: result.cards,
+        });
+      }
+    });
+
     // Real-time interaction
     socket.on('player:look', (data) => {
       const room = this.getPlayerRoom(socket.id);

@@ -35,6 +35,7 @@ class SocketService {
     this.socket.on('game:new-round', () => this.emit('game:new-round'));
     this.socket.on('game:timer-update', (d) => this.emit('game:timer-update', d));
     this.socket.on('game:log', (log) => this.emit('game:log', log));
+    this.socket.on('game:cards-revealed', (d) => this.emit('game:cards-revealed', d));
     this.socket.on('player:look-update', (d) => this.emit('player:look-update', d));
     this.socket.on('player:emote-update', (d) => this.emit('player:emote-update', d));
     this.socket.on('player:chat-update', (d) => this.emit('player:chat-update', d));
@@ -97,6 +98,12 @@ class SocketService {
       }
       this.socket.emit('game:rebuy', { amount }, resolve);
     });
+  }
+
+  // --- Show Cards ---
+  showCards(): void {
+    if (!this.socket?.connected) return;
+    this.socket.emit('game:show-cards');
   }
 
   // --- Game Actions ---

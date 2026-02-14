@@ -615,6 +615,16 @@ export class GameManager {
     return { success: true };
   }
 
+  // --- Show Cards (post-hand reveal) ---
+  showCards(playerId: string): { cards: Card[]; playerName: string } | null {
+    if (this.stage !== GameStage.SHOWDOWN) return null;
+    const p = this.players.find(pl => pl.id === playerId);
+    if (!p || p.hand.length === 0) return null;
+    const cards = p.hand.map(c => `${c.rank}${c.suit}`).join(' ');
+    this.addLog('show', `${p.name} shows: ${cards}`, p.id);
+    return { cards: p.hand, playerName: p.name };
+  }
+
   // --- Game Log Helpers ---
   private addLog(type: GameLogEntry['type'], message: string, playerId?: string): void {
     const log: GameLogEntry = {

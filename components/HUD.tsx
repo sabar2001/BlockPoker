@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Player, Card, GameStage, GameVariant } from '../types';
 import { socketService } from '../services/socketService';
 import { EmoteType, GameLogEntry } from '../shared/protocol';
 import SettingsModal from './SettingsModal';
+import { evaluateBestHand } from '../utils/handEvaluator';
 
 interface HUDProps {
   user: Player | undefined;
@@ -24,6 +25,8 @@ interface HUDProps {
   timeRemaining: number;
   waitingForDeal: boolean;
   isHost: boolean;
+  myHand: Card[];
+  revealedCards: Map<string, Card[]>;
 }
 
 const CardDisplay: React.FC<{ card: Card; size?: 'sm' | 'md' }> = ({ card, size = 'md' }) => {
@@ -50,17 +53,29 @@ const EMOTES: { key: string; emote: EmoteType; icon: string }[] = [
 
 const HUD: React.FC<HUDProps> = ({
   user, gameState, gameVariant, currentTurnIndex, players, communityCards, pot, onAction, minBet, onToggleVariant, onLeave, isLocked, isMobile,
-  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind
+  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind, myHand, revealedCards
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
   const showRaiseSliderRef = useRef(false);
   const [rebuyAmount, setRebuyAmount] = useState(1000);
   const [rebuyError, setRebuyError] = useState('');
+  const [hasShownCards, setHasShownCards] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const raiseValueRef = useRef(0);
   
   const isUserTurn = user && players[currentTurnIndex]?.id === user.id && !user.isFolded && gameState !== GameStage.SHOWDOWN;
+  const isShowdown = gameState === GameStage.SHOWDOWN;
+
+  // Reset "shown cards" flag when a new round starts (stage changes away from showdown)
+  useEffect(() => {
+    if (!isShowdown) setHasShownCards(false);
+  }, [isShowdown]);
+
+  // Best hand evaluation — updates as community cards change
+  const bestHandName = useMemo(() => {
+    return evaluateBestHand(myHand, communityCards, gameVariant);
+  }, [myHand, communityCards, gameVariant]);
   const callAmount = user ? Math.max(0, minBet - user.currentBet) : 0;
 
   // Raise bounds — amounts are "raise TO" values
@@ -199,6 +214,7 @@ const HUD: React.FC<HUDProps> = ({
       case 'winner': return 'text-yellow-300';
       case 'timeout': return 'text-red-400';
       case 'rebuy': return 'text-purple-400';
+      case 'show': return 'text-pink-400';
       default: return 'text-gray-300';
     }
   };
@@ -274,6 +290,13 @@ const HUD: React.FC<HUDProps> = ({
           <div className="text-white text-2xl krunker-text drop-shadow-lg">
             BET: ${user.currentBet}
           </div>
+          {/* Best Hand Indicator */}
+          {bestHandName && myHand.length > 0 && !user.isFolded && (
+            <div className="bg-black/70 px-3 py-1 border-l-4 border-cyan-500 mt-1">
+              <div className="text-cyan-400 text-sm">YOUR HAND</div>
+              <div className="text-white text-xl krunker-text">{bestHandName}</div>
+            </div>
+          )}
           {/* Rebuy UI - shown when player has 0 chips */}
           {user.chips === 0 && (
             <div className="bg-black/80 border-2 border-yellow-500 p-3 w-64 pointer-events-auto">
@@ -330,6 +353,26 @@ const HUD: React.FC<HUDProps> = ({
               <div key={i} className="w-10 h-16 bg-black/40 border-2 border-white/10" />
             ))}
           </div>
+
+          {/* Revealed Cards during Showdown */}
+          {isShowdown && revealedCards.size > 0 && (
+            <div className="flex flex-col gap-2 mt-2 pointer-events-none">
+              {Array.from(revealedCards.entries()).map(([playerId, cards]) => {
+                const player = players.find(p => p.id === playerId);
+                if (!player || player.id === user.id) return null; // Don't show own cards here
+                return (
+                  <div key={playerId} className="flex items-center gap-2 bg-black/60 px-3 py-1 rounded">
+                    <span className="text-pink-400 text-sm krunker-text">{player.name}:</span>
+                    <div className="flex gap-1">
+                      {cards.map((card, i) => (
+                        <CardDisplay key={i} card={card} size="sm" />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Bottom Right: Actions + Timer + Raise Slider */}
@@ -382,6 +425,25 @@ const HUD: React.FC<HUDProps> = ({
               <button onClick={() => setShowRaiseSlider(prev => !prev)} className="bg-yellow-900/90 text-yellow-100 border-2 border-yellow-500 px-6 py-2 text-2xl hover:bg-yellow-800 w-48 text-right">
                 [3] RAISE
               </button>
+            </div>
+          ) : isShowdown && myHand.length > 0 ? (
+            <div className="flex flex-col gap-2 items-end">
+              <div className="bg-black/70 px-4 py-2 text-yellow-300 text-xl border-r-4 border-yellow-500 krunker-text">
+                SHOWDOWN
+              </div>
+              {/* Show Cards Button — only when pointer is unlocked (ESC screen) */}
+              {!hasShownCards ? (
+                <button
+                  onClick={() => { socketService.showCards(); setHasShownCards(true); }}
+                  className="bg-pink-900/90 text-pink-100 border-2 border-pink-500 px-6 py-2 text-2xl hover:bg-pink-800 w-48 text-right"
+                >
+                  SHOW CARDS
+                </button>
+              ) : (
+                <div className="bg-black/70 px-4 py-2 text-pink-400 text-lg border-r-4 border-pink-500">
+                  CARDS SHOWN
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-black/70 px-4 py-2 text-gray-400 text-xl border-r-4 border-gray-500">

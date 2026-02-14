@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { socketService } from '../services/socketService';
 import { EmoteType } from '../shared/protocol';
-import { Card } from '../types';
+import { Card, GameStage, GameVariant } from '../types';
 import { MobileCardOverlay } from './MobileCardOverlay';
+import { evaluateBestHand } from '../utils/handEvaluator';
 
 interface MobileControlsProps {
   onAction: (action: 'fold' | 'call' | 'raise', amount?: number) => void;
@@ -23,6 +24,8 @@ interface MobileControlsProps {
   highestBet?: number;
   currentBet?: number;
   bigBlind?: number;
+  gameStage?: GameStage;
+  gameVariant?: GameVariant;
 }
 
 const EMOTES: { emote: EmoteType; icon: string }[] = [
@@ -37,14 +40,29 @@ const EMOTES: { emote: EmoteType; icon: string }[] = [
 export const MobileControls: React.FC<MobileControlsProps> = ({
   onAction, isUserTurn, callAmount, raiseAmount, raiseLabel, onCameraRotate,
   timeRemaining = 0, waitingForDeal = false, isHost = false, roomCode = '', chips = 0, pot = 0,
-  myHand = [], communityCards = [], isFolded = false, highestBet = 0, currentBet = 0, bigBlind = 20
+  myHand = [], communityCards = [], isFolded = false, highestBet = 0, currentBet = 0, bigBlind = 20,
+  gameStage = GameStage.PREFLOP, gameVariant = 'HOLDEM' as GameVariant
 }) => {
   const [startTouch, setStartTouch] = useState<{ x: number; y: number } | null>(null);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
   const [raiseValue, setRaiseValue] = useState(raiseAmount);
   const [rebuyAmount, setRebuyAmount] = useState(1000);
   const [rebuyError, setRebuyError] = useState('');
+  const [hasShownCards, setHasShownCards] = useState(false);
   const rotation = useRef({ yaw: 0, pitch: -0.3 }); // Initialize with correct starting pitch
+
+  const isShowdown = gameStage === GameStage.SHOWDOWN;
+
+  // Reset "shown cards" flag when a new round starts
+  useEffect(() => {
+    if (!isShowdown) setHasShownCards(false);
+  }, [isShowdown]);
+
+  // Best hand evaluation
+  const bestHandName = useMemo(() => {
+    if (isFolded) return null;
+    return evaluateBestHand(myHand, communityCards, gameVariant);
+  }, [myHand, communityCards, gameVariant, isFolded]);
 
   // minRaise = max(2x current bet, current bet + big blind) — ensures at least BB post-flop
   const minRaise = Math.max(highestBet * 2, highestBet + bigBlind);
@@ -131,6 +149,10 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
         <div className="bg-black/70 px-3 py-2 border-r-4 border-yellow-500">
           <div className="text-yellow-400 text-xl">POT: ${pot}</div>
+          {/* Best Hand Indicator */}
+          {bestHandName && myHand.length > 0 && !isFolded && (
+            <div className="text-cyan-400 text-lg mt-1">{bestHandName}</div>
+          )}
         </div>
       </div>
       
@@ -181,6 +203,27 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               BUY IN ${rebuyAmount}
             </button>
             {rebuyError && <div className="text-red-400 text-sm mt-2 text-center">{rebuyError}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Show Cards Button - During Showdown */}
+      {isShowdown && myHand.length > 0 && !hasShownCards && (
+        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 'max(100px, calc(env(safe-area-inset-bottom, 24px) + 80px))', zIndex: 55 }}>
+          <button
+            onClick={() => { socketService.showCards(); setHasShownCards(true); }}
+            onTouchStart={(e) => { e.stopPropagation(); socketService.showCards(); setHasShownCards(true); }}
+            className="bg-pink-900/90 text-pink-100 text-2xl font-bold px-8 py-4 rounded-xl border-3 border-pink-500 active:scale-95 transition-transform shadow-lg font-[VT323]"
+            style={{ pointerEvents: 'auto' }}
+          >
+            SHOW CARDS
+          </button>
+        </div>
+      )}
+      {isShowdown && hasShownCards && (
+        <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none" style={{ bottom: 'max(100px, calc(env(safe-area-inset-bottom, 24px) + 80px))', zIndex: 55 }}>
+          <div className="bg-black/70 text-pink-400 text-xl px-6 py-3 rounded-xl border border-pink-500 font-[VT323]">
+            CARDS SHOWN
           </div>
         </div>
       )}

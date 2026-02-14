@@ -66,6 +66,7 @@ const App: React.FC = () => {
   const [waitingForDeal, setWaitingForDeal] = useState(false);
   const [roomCode, setRoomCode] = useState<string>('');
   const [hostId, setHostId] = useState<string>(''); // Track who is the host
+  const [revealedCards, setRevealedCards] = useState<Map<string, Card[]>>(new Map()); // playerId -> revealed cards
 
   // Subscribe to server events
   useEffect(() => {
@@ -107,6 +108,7 @@ const App: React.FC = () => {
       socketService.on('game:new-round', () => {
         setMyHand([]);
         setWinners([]);
+        setRevealedCards(new Map());
       }),
 
       socketService.on('game:timer-update', (data: { playerId: string; timeRemaining: number }) => {
@@ -116,6 +118,14 @@ const App: React.FC = () => {
 
       socketService.on('game:log', (log: GameLogEntry) => {
         setGameLogs(prev => [...prev, log].slice(-50)); // Keep last 50
+      }),
+
+      socketService.on('game:cards-revealed', (data: { playerId: string; playerName: string; cards: ProtoCard[] }) => {
+        setRevealedCards(prev => {
+          const next = new Map(prev);
+          next.set(data.playerId, data.cards.map(toClientCard));
+          return next;
+        });
       }),
 
       socketService.on('room:state', (state) => {
@@ -277,6 +287,8 @@ const App: React.FC = () => {
           highestBet={highestBet}
           currentBet={me?.currentBet || 0}
           bigBlind={bigBlind}
+          gameStage={gameStage}
+          gameVariant={gameVariant}
         />
       ) : (
         <HUD
@@ -298,6 +310,8 @@ const App: React.FC = () => {
           timeRemaining={isUserTurn && currentTimerPlayerId === myId ? timeRemaining : 0}
           waitingForDeal={waitingForDeal}
           isHost={isHost}
+          myHand={myHand}
+          revealedCards={revealedCards}
         />
       )}
     </div>

@@ -40,7 +40,7 @@ export const DEFAULT_TABLE_CONFIG: TableConfig = {
 };
 
 // Game log entry
-export type GameLogType = 'deal' | 'action' | 'stage' | 'winner' | 'blinds' | 'timeout' | 'rebuy';
+export type GameLogType = 'deal' | 'action' | 'stage' | 'winner' | 'blinds' | 'timeout' | 'rebuy' | 'show';
 
 export interface GameLogEntry {
   id: string;
@@ -122,6 +122,7 @@ export interface ClientToServerEvents {
   'game:action': (data: { action: PlayerAction; amount?: number }) => void;
   'game:deal': () => void; // host triggers next round
   'game:rebuy': (data: { amount: number }, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'game:show-cards': () => void;
 
   // Real-time interaction
   'player:look': (data: { yaw: number; pitch: number }) => void;
@@ -150,6 +151,7 @@ export interface ServerToClientEvents {
   'game:new-round': () => void;
   'game:timer-update': (data: { playerId: string; timeRemaining: number }) => void;
   'game:log': (log: GameLogEntry) => void;
+  'game:cards-revealed': (data: { playerId: string; playerName: string; cards: Card[] }) => void;
 
   // Real-time interaction
   'player:look-update': (data: { playerId: string; yaw: number; pitch: number }) => void;
