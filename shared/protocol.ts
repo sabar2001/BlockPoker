@@ -121,7 +121,7 @@ export interface ClientToServerEvents {
   'game:start': () => void;
   'game:action': (data: { action: PlayerAction; amount?: number }) => void;
   'game:deal': () => void; // host triggers next round
-  'game:rebuy': (data: { amount: number }, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'game:rebuy': (data: { amount: number }, callback: (response: { success: boolean; error?: string; message?: string }) => void) => void;
   'game:show-cards': () => void;
 
   // Real-time interaction

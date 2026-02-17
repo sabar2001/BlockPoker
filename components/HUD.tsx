@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Player, Card, GameStage, GameVariant } from '../types';
 import { socketService } from '../services/socketService';
+import { soundService } from '../services/soundService';
 import { EmoteType, GameLogEntry } from '../shared/protocol';
 import SettingsModal from './SettingsModal';
 import { evaluateBestHand } from '../utils/handEvaluator';
@@ -60,6 +61,8 @@ const HUD: React.FC<HUDProps> = ({
   const showRaiseSliderRef = useRef(false);
   const [rebuyAmount, setRebuyAmount] = useState(1000);
   const [rebuyError, setRebuyError] = useState('');
+  const [rebuyPending, setRebuyPending] = useState(false);
+  const [rebuyMessage, setRebuyMessage] = useState('');
   const [hasShownCards, setHasShownCards] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const raiseValueRef = useRef(0);
@@ -162,6 +165,7 @@ const HUD: React.FC<HUDProps> = ({
         }
         if (e.key === 'Enter') {
           e.preventDefault(); e.stopPropagation();
+          soundService.playRaise();
           onAction('raise', raiseValueRef.current);
           closeRaiseSlider();
           return;
@@ -174,9 +178,17 @@ const HUD: React.FC<HUDProps> = ({
 
       // Poker actions (1/2/3)
       if (isUserTurn) {
-        if (e.key === '1') { onAction('fold'); return; }
-        if (e.key === '2') { onAction('call'); return; }
+        if (e.key === '1') { soundService.playFold(); onAction('fold'); return; }
+        if (e.key === '2') { soundService.playChip(); onAction('call'); return; }
         if (e.key === '3') { toggleRaiseSlider(); return; }
+      }
+
+      // Show cards during showdown (S key) - works regardless of isLocked state
+      if ((e.key === 'S' || e.key === 's') && isShowdown && myHand.length > 0 && !hasShownCards) {
+        e.preventDefault();
+        socketService.showCards();
+        setHasShownCards(true);
+        return;
       }
 
       // Emotes (4-9)
@@ -187,15 +199,26 @@ const HUD: React.FC<HUDProps> = ({
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [isUserTurn, onAction, toggleRaiseSlider, closeRaiseSlider]);
+  }, [isUserTurn, onAction, toggleRaiseSlider, closeRaiseSlider, isShowdown, myHand, hasShownCards]);
 
   const handleRebuy = async () => {
     setRebuyError('');
     const result = await socketService.rebuy(rebuyAmount);
-    if (!result.success) {
+    if (result.success) {
+      setRebuyPending(true);
+      setRebuyMessage(result.message || 'You will be dealt in on the next hand');
+    } else {
       setRebuyError(result.error || 'Rebuy failed');
     }
   };
+
+  // Reset rebuy pending state when player gets chips (dealt into new round)
+  useEffect(() => {
+    if (user && user.chips > 0 && !user.isFolded) {
+      setRebuyPending(false);
+      setRebuyMessage('');
+    }
+  }, [user?.chips, user?.isFolded]);
 
   if (!user) return null;
 
@@ -298,7 +321,7 @@ const HUD: React.FC<HUDProps> = ({
             </div>
           )}
           {/* Rebuy UI - shown when player has 0 chips */}
-          {user.chips === 0 && (
+          {user.chips === 0 && !rebuyPending && (
             <div className="bg-black/80 border-2 border-yellow-500 p-3 w-64 pointer-events-auto">
               <div className="text-yellow-400 text-lg mb-2 krunker-text">REBUY</div>
               <input
@@ -315,6 +338,13 @@ const HUD: React.FC<HUDProps> = ({
                 BUY IN ${rebuyAmount}
               </button>
               {rebuyError && <div className="text-red-400 text-sm mt-1">{rebuyError}</div>}
+            </div>
+          )}
+          {/* Rebuy pending - waiting for next hand */}
+          {rebuyPending && (
+            <div className="bg-black/80 border-2 border-green-500 p-3 w-64 pointer-events-auto">
+              <div className="text-green-400 text-lg mb-1 krunker-text">REBUY SUCCESSFUL</div>
+              <div className="text-green-300 text-sm animate-pulse">{rebuyMessage}</div>
             </div>
           )}
           {/* Emote bar */}
@@ -405,7 +435,7 @@ const HUD: React.FC<HUDProps> = ({
                     <span className="text-gray-400 text-xs">${userMaxRaise}</span>
                   </div>
                   <button
-                    onClick={() => { onAction('raise', raiseValueRef.current); setShowRaiseSlider(false); showRaiseSliderRef.current = false; }}
+                    onClick={() => { soundService.playRaise(); onAction('raise', raiseValueRef.current); setShowRaiseSlider(false); showRaiseSliderRef.current = false; }}
                     className="bg-yellow-800 hover:bg-yellow-700 text-white text-xl py-2 w-full border border-yellow-500"
                   >
                     [ENTER] RAISE ${raiseValue}
@@ -416,10 +446,10 @@ const HUD: React.FC<HUDProps> = ({
                 </div>
               )}
 
-              <button onClick={() => onAction('fold')} className="bg-red-900/90 text-red-100 border-2 border-red-500 px-6 py-2 text-2xl hover:bg-red-800 w-48 text-right">
+              <button onClick={() => { soundService.playFold(); onAction('fold'); }} className="bg-red-900/90 text-red-100 border-2 border-red-500 px-6 py-2 text-2xl hover:bg-red-800 w-48 text-right">
                 [1] FOLD
               </button>
-              <button onClick={() => onAction('call')} className="bg-blue-900/90 text-blue-100 border-2 border-blue-500 px-6 py-2 text-2xl hover:bg-blue-800 w-48 text-right">
+              <button onClick={() => { soundService.playChip(); onAction('call'); }} className="bg-blue-900/90 text-blue-100 border-2 border-blue-500 px-6 py-2 text-2xl hover:bg-blue-800 w-48 text-right">
                 [2] {callAmount > 0 ? `CALL ${callAmount}` : 'CHECK'}
               </button>
               <button onClick={() => setShowRaiseSlider(prev => !prev)} className="bg-yellow-900/90 text-yellow-100 border-2 border-yellow-500 px-6 py-2 text-2xl hover:bg-yellow-800 w-48 text-right">
@@ -431,13 +461,13 @@ const HUD: React.FC<HUDProps> = ({
               <div className="bg-black/70 px-4 py-2 text-yellow-300 text-xl border-r-4 border-yellow-500 krunker-text">
                 SHOWDOWN
               </div>
-              {/* Show Cards Button — only when pointer is unlocked (ESC screen) */}
+              {/* Show Cards Button — works with [S] key or click */}
               {!hasShownCards ? (
                 <button
                   onClick={() => { socketService.showCards(); setHasShownCards(true); }}
                   className="bg-pink-900/90 text-pink-100 border-2 border-pink-500 px-6 py-2 text-2xl hover:bg-pink-800 w-48 text-right"
                 >
-                  SHOW CARDS
+                  [S] SHOW CARDS
                 </button>
               ) : (
                 <div className="bg-black/70 px-4 py-2 text-pink-400 text-lg border-r-4 border-pink-500">

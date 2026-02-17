@@ -70,6 +70,7 @@ export class RoomManager {
       if (!room) { callback({ success: false, error: 'Room not found' }); return; }
       
       // Allow joining at any time - players can join between hands or sit out current hand
+
       console.log(`[Room] Join attempt by ${data.playerName} to ${code}: isPlaying=${room.game.isPlaying}, waitingForDeal=${room.game.waitingForDeal}`);
 
       this.leaveRoom(socket);

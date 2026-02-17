@@ -599,20 +599,19 @@ export class GameManager {
   }
 
   // --- Rebuy ---
-  rebuy(playerId: string, amount: number): { success: boolean; error?: string } {
+  rebuy(playerId: string, amount: number): { success: boolean; error?: string; message?: string } {
     const p = this.players.find(pl => pl.id === playerId);
     if (!p) return { success: false, error: 'Player not found' };
     if (p.chips > 0) return { success: false, error: 'You still have chips' };
-    if (!this.waitingForDeal && this.isPlaying && this.stage !== GameStage.SHOWDOWN) {
-      return { success: false, error: 'Cannot rebuy during an active hand' };
-    }
 
     const chips = Math.max(this.tableConfig.minBuyIn, Math.min(this.tableConfig.maxBuyIn, amount));
     p.chips = chips;
-    p.isFolded = false;
+    // Do NOT set isFolded = false here. startNewRound() already checks
+    // p.isFolded = p.chips <= 0 || !p.isConnected, so the player will
+    // naturally be included in the next hand once they have chips.
     this.addLog('rebuy', `${p.name} rebuys for $${chips}`, p.id);
     this.onStateChange();
-    return { success: true };
+    return { success: true, message: 'You will be dealt in on the next hand' };
   }
 
   // --- Show Cards (post-hand reveal) ---

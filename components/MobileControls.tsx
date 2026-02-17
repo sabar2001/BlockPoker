@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { socketService } from '../services/socketService';
+import { soundService } from '../services/soundService';
 import { EmoteType } from '../shared/protocol';
 import { Card, GameStage, GameVariant } from '../types';
 import { MobileCardOverlay } from './MobileCardOverlay';
@@ -48,6 +49,8 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   const [raiseValue, setRaiseValue] = useState(raiseAmount);
   const [rebuyAmount, setRebuyAmount] = useState(1000);
   const [rebuyError, setRebuyError] = useState('');
+  const [rebuyPending, setRebuyPending] = useState(false);
+  const [rebuyMessage, setRebuyMessage] = useState('');
   const [hasShownCards, setHasShownCards] = useState(false);
   const rotation = useRef({ yaw: 0, pitch: -0.3 }); // Initialize with correct starting pitch
 
@@ -77,10 +80,21 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   const handleRebuy = async () => {
     setRebuyError('');
     const result = await socketService.rebuy(rebuyAmount);
-    if (!result.success) {
+    if (result.success) {
+      setRebuyPending(true);
+      setRebuyMessage(result.message || 'You will be dealt in on the next hand');
+    } else {
       setRebuyError(result.error || 'Rebuy failed');
     }
   };
+
+  // Reset rebuy pending state when player gets chips (dealt into new round)
+  React.useEffect(() => {
+    if (chips > 0 && !isFolded) {
+      setRebuyPending(false);
+      setRebuyMessage('');
+    }
+  }, [chips, isFolded]);
   
   // Initialize camera rotation on mount (only once)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,7 +197,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       )}
       
       {/* Rebuy UI - shown when player has 0 chips */}
-      {chips === 0 && (
+      {chips === 0 && !rebuyPending && (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ zIndex: 65 }}>
           <div className="bg-black/90 border-2 border-yellow-500 p-4 rounded-xl w-72 font-[VT323]" style={{ pointerEvents: 'auto' }}>
             <div className="text-yellow-400 text-2xl mb-3 text-center">REBUY</div>
@@ -203,6 +217,15 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               BUY IN ${rebuyAmount}
             </button>
             {rebuyError && <div className="text-red-400 text-sm mt-2 text-center">{rebuyError}</div>}
+          </div>
+        </div>
+      )}
+      {/* Rebuy pending - waiting for next hand */}
+      {rebuyPending && (
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ zIndex: 65 }}>
+          <div className="bg-black/90 border-2 border-green-500 p-4 rounded-xl w-72 font-[VT323]" style={{ pointerEvents: 'auto' }}>
+            <div className="text-green-400 text-2xl mb-2 text-center">REBUY SUCCESSFUL</div>
+            <div className="text-green-300 text-lg text-center animate-pulse">{rebuyMessage}</div>
           </div>
         </div>
       )}
@@ -251,8 +274,8 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               <span className="text-gray-400 text-xs">${userMaxRaise}</span>
             </div>
             <button
-              onClick={() => { onAction('raise', raiseValue); setShowRaiseSlider(false); }}
-              onTouchStart={(e) => { e.stopPropagation(); onAction('raise', raiseValue); setShowRaiseSlider(false); }}
+              onClick={() => { soundService.playRaise(); onAction('raise', raiseValue); setShowRaiseSlider(false); }}
+              onTouchStart={(e) => { e.stopPropagation(); soundService.playRaise(); onAction('raise', raiseValue); setShowRaiseSlider(false); }}
               className="bg-yellow-800 hover:bg-yellow-700 text-white text-xl py-3 w-full border border-yellow-500 rounded-xl active:scale-95"
               style={{ pointerEvents: 'auto' }}
             >
@@ -261,7 +284,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           </div>
         </div>
       )}
-
+      
       {/* Action Buttons - Bottom center, horizontal layout with safe areas */}
       {isUserTurn && (
         <div 
@@ -269,16 +292,16 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           style={{ bottom: 'max(24px, env(safe-area-inset-bottom, 24px))', zIndex: 50 }}
         >
           <button 
-            onClick={() => onAction('fold')}
-            onTouchStart={(e) => { e.stopPropagation(); onAction('fold'); }}
+            onClick={() => { soundService.playFold(); onAction('fold'); }}
+            onTouchStart={(e) => { e.stopPropagation(); soundService.playFold(); onAction('fold'); }}
             className="bg-red-900/90 backdrop-blur text-white text-2xl font-bold px-6 py-5 rounded-xl border-3 border-red-500 active:scale-95 transition-transform shadow-lg min-w-[140px] min-h-[70px] font-[VT323]"
             style={{ pointerEvents: 'auto' }}
           >
             FOLD
           </button>
           <button 
-            onClick={() => onAction('call')}
-            onTouchStart={(e) => { e.stopPropagation(); onAction('call'); }}
+            onClick={() => { soundService.playChip(); onAction('call'); }}
+            onTouchStart={(e) => { e.stopPropagation(); soundService.playChip(); onAction('call'); }}
             className="bg-blue-900/90 backdrop-blur text-white text-2xl font-bold px-6 py-5 rounded-xl border-3 border-blue-500 active:scale-95 transition-transform shadow-lg min-w-[140px] min-h-[70px] font-[VT323]"
             style={{ pointerEvents: 'auto' }}
           >

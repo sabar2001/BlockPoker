@@ -90,7 +90,7 @@ class SocketService {
   }
 
   // --- Rebuy ---
-  rebuy(amount: number): Promise<{ success: boolean; error?: string }> {
+  rebuy(amount: number): Promise<{ success: boolean; error?: string; message?: string }> {
     return new Promise((resolve) => {
       if (!this.socket?.connected) {
         resolve({ success: false, error: 'Not connected' });

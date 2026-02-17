@@ -98,13 +98,18 @@ const FirstPersonHand = ({ hand }: { hand: CardType[] }) => {
       const bobX = Math.sin(time * 8) * 0.02;
       const bobY = Math.sin(time * 16) * 0.02;
 
+      // 1. Copy camera position & orientation
       group.current.position.copy(camera.position);
       group.current.quaternion.copy(camera.quaternion);
 
+      // 2. Offset in camera-local space (right, down, forward)
       group.current.translateX(0.4 + bobX);
       group.current.translateY(-0.3 + bobY);
       group.current.translateZ(-0.6);
-      group.current.rotation.z = Math.sin(time * 2) * 0.05;
+
+      // 3. Gentle sway — use rotateZ (quaternion multiply) instead of
+      //    setting rotation.z (which corrupts the Euler decomposition)
+      group.current.rotateZ(Math.sin(time * 2) * 0.05);
     }
   });
 
@@ -193,13 +198,13 @@ const PokerTable = ({ communityCards, pot }: { communityCards: CardType[], pot: 
         );
       })}
 
-      {/* Community cards */}
+      {/* Community cards - raised and tilted for better visibility */}
       {communityCards.map((card, i) => (
         <CardMesh
           key={i}
           card={card}
-          position={[-2 + (i * 1.0), 0.85, 0]}
-          rotation={[-Math.PI / 2, 0, cardRotations[i] || 0]}
+          position={[-2 + (i * 1.0), 0.95, 0]}
+          rotation={[-Math.PI / 2 + 0.15, 0, cardRotations[i] || 0]}
         />
       ))}
 
@@ -278,7 +283,8 @@ const CameraPositioner = ({ playerPosition, onInitialYaw }: { playerPosition?: [
 
       // Set initial look direction toward table center (once)
       if (!initialLookSet.current) {
-        const yaw = Math.atan2(-x, -z); // Angle from seat to origin
+        // Camera default forward is -Z. To face origin from (x,z), yaw = atan2(x, z).
+        const yaw = Math.atan2(x, z);
         const euler = new THREE.Euler(-0.3, yaw, 0, 'YXZ');
         camera.quaternion.setFromEuler(euler);
         initialLookSet.current = true;
