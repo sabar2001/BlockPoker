@@ -323,7 +323,6 @@ const App: React.FC = () => {
         cameraRotation={cameraRotation}
         onInitialYaw={handleInitialYaw}
         gameStage={gameStage}
-        showdownResults={showdownResults}
       />
 
       {isMobile ? (

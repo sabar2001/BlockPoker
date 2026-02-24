@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 // No drei Text/Html - they cause Suspense hang and black screen
 import * as THREE from 'three';
-import { Player, Card as CardType, Suit, ShowdownPlayerResult } from '../types';
+import { Player, Card as CardType, Suit } from '../types';
 import PlayerAvatar from './PlayerAvatar';
 import { socketService } from '../services/socketService';
 import { voiceService } from '../services/voiceService';
@@ -18,7 +18,6 @@ interface GameSceneProps {
   cameraRotation?: { yaw: number; pitch: number };
   onInitialYaw?: (yaw: number) => void;
   gameStage?: number;
-  showdownResults?: ShowdownPlayerResult[];
 }
 
 // Creates a canvas texture for card faces (rank + suit)
@@ -145,12 +144,56 @@ function viewerFaceYaw(viewerPosition: [number, number, number] | undefined): nu
   return Math.atan2(viewerPosition[0], viewerPosition[2]);
 }
 
+// Ease-out cubic for smooth deceleration at end
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// Animated community card: flies from deck (center) to final position when dealt
+const AnimatedCommunityCard: React.FC<{
+  card: CardType;
+  index: number;
+  cardHeight: number;
+  faceYaw: number;
+  cardTilt: number;
+  cardRotation: number;
+}> = ({ card, index, cardHeight, faceYaw, cardTilt, cardRotation }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const finalX = -2 + index * 1.0;
+  const finalPos = useMemo(() => new THREE.Vector3(finalX, cardHeight, 0), [finalX, cardHeight]);
+  const startPos = useMemo(() => new THREE.Vector3(0, 0.5, 0), []);
+
+  useFrame((state) => {
+    if (!groupRef.current) return;
+    const clock = state.clock.getElapsedTime();
+    if (startTimeRef.current === null) startTimeRef.current = clock;
+    const elapsed = clock - startTimeRef.current;
+    const duration = 0.55;
+    const t = Math.min(elapsed / duration, 1);
+    const eased = easeOutCubic(t);
+    groupRef.current.position.lerpVectors(startPos, finalPos, eased);
+    const scale = 0.65 + 0.35 * eased;
+    groupRef.current.scale.setScalar(scale);
+    if (t >= 1) {
+      groupRef.current.position.copy(finalPos);
+      groupRef.current.scale.setScalar(1);
+    }
+  });
+
+  const rotation: [number, number, number] = [-Math.PI / 2 + cardTilt, faceYaw, cardRotation];
+  return (
+    <group ref={groupRef}>
+      <CardMesh card={card} position={[0, 0, 0]} rotation={rotation} doubleSided />
+    </group>
+  );
+};
+
 const PokerTable = ({ communityCards, pot, viewerPosition }: { communityCards: CardType[]; pot: number; viewerPosition?: [number, number, number] }) => {
   const cardRotations = useMemo(() => {
     return communityCards.map(() => Math.random() * 0.1);
   }, [communityCards.length]);
   const faceYaw = viewerFaceYaw(viewerPosition);
-  // Tilt cards up so the face is readable; orient toward local player so visible from every seat
   const cardTilt = 0.5;
   const cardHeight = 1.02;
 
@@ -215,14 +258,16 @@ const PokerTable = ({ communityCards, pot, viewerPosition }: { communityCards: C
         );
       })}
 
-      {/* Community cards - raised, tilted toward viewer so readable from every seat */}
+      {/* Community cards - animate from deck to position when dealt */}
       {communityCards.map((card, i) => (
-        <CardMesh
-          key={i}
+        <AnimatedCommunityCard
+          key={`${i}-${card.rank}-${card.suit}`}
           card={card}
-          position={[-2 + (i * 1.0), cardHeight, 0]}
-          rotation={[-Math.PI / 2 + cardTilt, faceYaw, cardRotations[i] || 0]}
-          doubleSided
+          index={i}
+          cardHeight={cardHeight}
+          faceYaw={faceYaw}
+          cardTilt={cardTilt}
+          cardRotation={cardRotations[i] || 0}
         />
       ))}
 
@@ -431,56 +476,7 @@ const VoiceSpatialUpdater = ({ players, myId }: { players: Player[]; myId?: stri
   return null;
 };
 
-// Renders face-up cards on the table in front of each player during showdown
-const ShowdownTableCards: React.FC<{ results: ShowdownPlayerResult[]; players: Player[] }> = ({ results, players }) => {
-  return (
-    <group>
-      {results.map(r => {
-        const player = players.find(p => p.id === r.playerId);
-        if (!player) return null;
-        const [px, , pz] = player.position;
-        // Place cards on table between player and center, about 60% toward center
-        const tableX = px * 0.55;
-        const tableZ = pz * 0.55;
-        const cardY = 0.88;
-        // Face cards toward center
-        const faceAngle = Math.atan2(-tableX, -tableZ);
-        const tilt = 0.5;
-
-        return (
-          <group key={r.playerId} position={[tableX, 0, tableZ]}>
-            {r.cards.map((card, i) => {
-              const offset = (i - (r.cards.length - 1) / 2) * 0.5;
-              return (
-                <CardMesh
-                  key={i}
-                  card={card}
-                  position={[
-                    offset * Math.cos(faceAngle),
-                    cardY,
-                    offset * -Math.sin(faceAngle)
-                  ]}
-                  rotation={[-Math.PI / 2 + tilt, faceAngle, 0]}
-                  scale={0.6}
-                  doubleSided
-                />
-              );
-            })}
-            {/* Winner glow ring */}
-            {r.isWinner && (
-              <mesh position={[0, 0.84, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[0.8, 1.0, 32]} />
-                <meshStandardMaterial color="#ffd700" emissive="#ffd700" emissiveIntensity={1.5} transparent opacity={0.7} side={THREE.DoubleSide} />
-              </mesh>
-            )}
-          </group>
-        );
-      })}
-    </group>
-  );
-};
-
-const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, currentTurnIndex, myId, isMobile, cameraRotation, onInitialYaw, gameStage, showdownResults }) => {
+const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, currentTurnIndex, myId, isMobile, cameraRotation, onInitialYaw, gameStage }) => {
   const { camera } = useThree();
   const [listener] = useState(() => new THREE.AudioListener());
 
@@ -525,11 +521,6 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
           audioListener={listener}
         />
       ))}
-
-      {/* Showdown: render all active players' cards face-up on the table */}
-      {gameStage === 4 && showdownResults && showdownResults.length > 0 && (
-        <ShowdownTableCards results={showdownResults} players={players} />
-      )}
 
       {/* Render User Hand FPS Style - desktop only, hide during SHOWDOWN and on mobile */}
       {user && !user.isFolded && user.hand.length > 0 && gameStage !== 4 && !isMobile && (

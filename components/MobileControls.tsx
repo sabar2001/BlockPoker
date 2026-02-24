@@ -180,7 +180,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           <div className="text-white text-xl">CHIPS: ${chips}</div>
         </div>
         <div className="bg-black/70 px-3 py-2 border-r-4 border-yellow-500">
-          <div className="text-yellow-400 text-xl">POT: ${pot}</div>
+          <div className="text-yellow-400 text-xl">POT: <span key={pot} className="inline-block animate-pot-bump">${pot}</span></div>
           {/* Best Hand Indicator */}
           {bestHandName && myHand.length > 0 && !isFolded && (
             <div className="text-cyan-400 text-lg mt-1">{bestHandName}</div>
@@ -202,7 +202,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       
       {/* Deal Button - Center when waiting */}
       {isHost && waitingForDeal && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ zIndex: 65 }}>
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-fade-slide-up" style={{ zIndex: 65 }}>
           <button
             onClick={() => socketService.dealNextRound()}
             onTouchStart={(e) => { e.stopPropagation(); socketService.dealNextRound(); }}
@@ -250,7 +250,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
 
       {/* Showdown Results Panel */}
       {isShowdown && showdownResults.length > 0 && (
-        <div className="absolute left-4 right-4" style={{ bottom: 'max(24px, env(safe-area-inset-bottom, 24px))', zIndex: 55 }}>
+        <div className="absolute left-4 right-4 animate-fade-slide-up" style={{ bottom: 'max(24px, env(safe-area-inset-bottom, 24px))', zIndex: 55 }}>
           <div className="bg-black/90 border-2 border-yellow-500 rounded-xl p-3 font-[VT323]" style={{ pointerEvents: 'auto', maxHeight: '50vh', overflowY: 'auto' }}>
             {/* Winner banner */}
             {(() => {
@@ -268,12 +268,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
             })()}
             {/* Player hands */}
             <div className="flex flex-col gap-1">
-              {showdownResults.map(r => (
+              {showdownResults.map((r, idx) => (
                 <div
                   key={r.playerId}
-                  className={`flex items-center gap-2 px-2 py-1 rounded ${
+                  className={`flex items-center gap-2 px-2 py-1 rounded opacity-0 animate-fade-slide-up ${
                     r.isWinner ? 'bg-yellow-900/60 border border-yellow-600' : 'bg-black/40 border border-gray-700'
                   }`}
+                  style={{ animationDelay: `${idx * 80}ms` }}
                 >
                   <div className="flex flex-col min-w-[60px]">
                     <span className={`text-xs ${r.isWinner ? 'text-yellow-300' : 'text-gray-300'}`}>{r.playerName}</span>

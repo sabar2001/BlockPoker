@@ -527,7 +527,7 @@ export class GameManager {
 
     this.onStateChange();
 
-    // Auto-deal after showing results
+    // Auto-deal after showing results (7s so players can see showdown)
     this.roundTimer = setTimeout(() => {
       this.dealerIndex = this.findNextActive(this.dealerIndex);
       this.players = this.players.filter(p => p.isConnected);
@@ -540,7 +540,7 @@ export class GameManager {
         this.isPlaying = false;
         this.onStateChange();
       }
-    }, 5000);
+    }, 7000);
   }
 
   private findNextActive(fromIndex: number): number {

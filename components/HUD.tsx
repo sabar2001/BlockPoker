@@ -363,15 +363,15 @@ const HUD: React.FC<HUDProps> = ({
 
         {/* Bottom Center: Pot, Board, and Deal Button */}
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-3" style={{ zIndex: 100 }}>
-          <div className="text-yellow-400 text-2xl mb-2 krunker-text bg-black/50 px-2 pointer-events-none">
-            POT: ${pot}
+          <div className="text-yellow-400 text-2xl mb-2 krunker-text bg-black/50 px-2 pointer-events-none flex items-baseline gap-1">
+            POT: <span key={pot} className="inline-block animate-pot-bump">${pot}</span>
           </div>
           
           {/* Deal Button - only for host when waiting - HIGH Z-INDEX */}
           {isHost && waitingForDeal && (
             <button
               onClick={() => socketService.dealNextRound()}
-              className="pointer-events-auto bg-green-900/90 hover:bg-green-800 text-white text-3xl px-8 py-4 border-4 border-green-500 animate-pulse krunker-text shadow-xl"
+              className="pointer-events-auto bg-green-900/90 hover:bg-green-800 text-white text-3xl px-8 py-4 border-4 border-green-500 animate-pulse krunker-text shadow-xl animate-fade-slide-up"
             >
               DEAL NEXT HAND
             </button>
@@ -379,10 +379,12 @@ const HUD: React.FC<HUDProps> = ({
           
           <div className="flex gap-2 p-2 bg-black/30 rounded-lg pointer-events-none">
             {communityCards.map((card, i) => (
-              <CardDisplay key={i} card={card} size="sm" />
+              <div key={`${i}-${card.rank}-${card.suit}`} className="opacity-0 animate-card-reveal" style={{ animationDelay: `${i * 90}ms` }}>
+                <CardDisplay card={card} size="sm" />
+              </div>
             ))}
             {Array.from({ length: 5 - communityCards.length }).map((_, i) => (
-              <div key={i} className="w-10 h-16 bg-black/40 border-2 border-white/10" />
+              <div key={`empty-${i}`} className="w-10 h-16 bg-black/40 border-2 border-white/10" />
             ))}
           </div>
 
@@ -404,14 +406,15 @@ const HUD: React.FC<HUDProps> = ({
                 );
               })()}
               {/* Each player's hand */}
-              {showdownResults.map(r => (
+              {showdownResults.map((r, idx) => (
                 <div
                   key={r.playerId}
-                  className={`flex items-center gap-3 px-3 py-2 rounded ${
+                  className={`flex items-center gap-3 px-3 py-2 rounded opacity-0 animate-fade-slide-up ${
                     r.isWinner
                       ? 'bg-yellow-900/70 border border-yellow-500'
                       : 'bg-black/60 border border-gray-700'
                   }`}
+                  style={{ animationDelay: `${idx * 80}ms` }}
                 >
                   <div className="flex flex-col min-w-[80px]">
                     <span className={`text-sm krunker-text ${r.isWinner ? 'text-yellow-300' : 'text-gray-300'}`}>
@@ -457,7 +460,7 @@ const HUD: React.FC<HUDProps> = ({
         {/* Bottom Right: Actions + Timer + Raise Slider */}
         <div className="absolute bottom-8 right-8 flex flex-col items-end gap-2 pointer-events-auto">
           {isUserTurn ? (
-            <div className="flex flex-col gap-2 items-end">
+            <div className="flex flex-col gap-2 items-end animate-fade-slide-up">
               {/* Timer Display */}
               {timeRemaining > 0 && (
                 <div className={`text-6xl font-bold ${getTimerColor()} krunker-text`}>
@@ -506,7 +509,7 @@ const HUD: React.FC<HUDProps> = ({
               </button>
             </div>
           ) : isShowdown ? (
-            <div className="flex flex-col gap-2 items-end">
+            <div className="flex flex-col gap-2 items-end animate-fade-slide-up">
               <div className="bg-black/70 px-4 py-2 text-yellow-300 text-xl border-r-4 border-yellow-500 krunker-text">
                 SHOWDOWN
               </div>
@@ -526,7 +529,7 @@ const HUD: React.FC<HUDProps> = ({
               )}
             </div>
           ) : (
-            <div className="bg-black/70 px-4 py-2 text-gray-400 text-xl border-r-4 border-gray-500">
+            <div className="bg-black/70 px-4 py-2 text-gray-400 text-xl border-r-4 border-gray-500 animate-fade-in">
               WAITING FOR {players[currentTurnIndex]?.name || '...'}
             </div>
           )}

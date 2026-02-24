@@ -41,7 +41,9 @@ export const MobileCardOverlay: React.FC<MobileCardOverlayProps> = ({ myHand, co
           style={{ bottom: 'max(120px, calc(env(safe-area-inset-bottom, 24px) + 96px))', zIndex: 35 }}
         >
           {myHand.map((card, i) => (
-            <CompactCard key={i} card={card} size="large" />
+            <div key={`hand-${i}-${card.rank}-${card.suit}`} className="opacity-0 animate-card-reveal" style={{ animationDelay: `${i * 70}ms` }}>
+              <CompactCard card={card} size="large" />
+            </div>
           ))}
         </div>
       )}
@@ -54,7 +56,9 @@ export const MobileCardOverlay: React.FC<MobileCardOverlayProps> = ({ myHand, co
         >
           <div className="bg-black/70 backdrop-blur px-3 py-2 rounded-xl border-2 border-yellow-500/50 flex gap-2">
             {communityCards.map((card, i) => (
-              <CompactCard key={i} card={card} size="small" />
+              <div key={`board-${i}-${card.rank}-${card.suit}`} className="opacity-0 animate-card-reveal" style={{ animationDelay: `${i * 90}ms` }}>
+                <CompactCard card={card} size="small" />
+              </div>
             ))}
           </div>
         </div>
