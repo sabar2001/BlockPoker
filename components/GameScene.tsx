@@ -70,7 +70,7 @@ const CardMesh: React.FC<{ card: CardType; position: [number, number, number]; r
   return (
     <group position={position} rotation={rotation} scale={scale}>
       {/* Card body */}
-      <mesh receiveShadow castShadow>
+      <mesh>
         <boxGeometry args={[0.7, 1, 0.02]} />
         <meshStandardMaterial color="#f0f0f0" />
       </mesh>
@@ -108,19 +108,19 @@ const FirstPersonHand = ({ hand }: { hand: CardType[] }) => {
     return (
       <group ref={group}>
         {/* Left hand holding first 2 cards */}
-        <mesh position={[-0.235, -0.2, 0.2]} rotation={[0.2, 0, 0]}>
-          <boxGeometry args={[0.12, 0.12, 0.5]} />
+        <mesh position={[-0.2, -0.17, 0.17]} rotation={[0.2, 0, 0]}>
+          <boxGeometry args={[0.1, 0.1, 0.42]} />
           <meshStandardMaterial color="#ffe0bd" />
         </mesh>
-        <CardMesh card={hand[0]} position={[-0.35, 0, 0]} rotation={[0.2, 0, 0]} scale={0.32} />
-        <CardMesh card={hand[1]} position={[-0.12, 0, 0]} rotation={[0.2, 0, 0]} scale={0.32} />
+        <CardMesh card={hand[0]} position={[-0.3, 0, 0]} rotation={[0.2, 0, 0]} scale={0.27} />
+        <CardMesh card={hand[1]} position={[-0.1, 0, 0]} rotation={[0.2, 0, 0]} scale={0.27} />
         {/* Right hand holding last 2 cards */}
-        <mesh position={[0.235, -0.2, 0.2]} rotation={[0.2, 0, 0]}>
-          <boxGeometry args={[0.12, 0.12, 0.5]} />
+        <mesh position={[0.2, -0.17, 0.17]} rotation={[0.2, 0, 0]}>
+          <boxGeometry args={[0.1, 0.1, 0.42]} />
           <meshStandardMaterial color="#ffe0bd" />
         </mesh>
-        <CardMesh card={hand[2]} position={[0.12, 0, 0]} rotation={[0.2, 0, 0]} scale={0.32} />
-        <CardMesh card={hand[3]} position={[0.35, 0, 0]} rotation={[0.2, 0, 0]} scale={0.32} />
+        <CardMesh card={hand[2]} position={[0.1, 0, 0]} rotation={[0.2, 0, 0]} scale={0.27} />
+        <CardMesh card={hand[3]} position={[0.3, 0, 0]} rotation={[0.2, 0, 0]} scale={0.27} />
       </group>
     );
   }
@@ -128,12 +128,12 @@ const FirstPersonHand = ({ hand }: { hand: CardType[] }) => {
   return (
     <group ref={group}>
       {/* Right hand holding 2 cards */}
-      <mesh position={[0, -0.2, 0.2]} rotation={[0.2, 0, 0]}>
-        <boxGeometry args={[0.15, 0.15, 0.6]} />
+      <mesh position={[0, -0.17, 0.17]} rotation={[0.2, 0, 0]}>
+        <boxGeometry args={[0.13, 0.13, 0.5]} />
         <meshStandardMaterial color="#ffe0bd" />
       </mesh>
-      <CardMesh card={hand[0]} position={[-0.15, 0, 0]} rotation={[0.2, -0.05, 0]} scale={0.4} />
-      {hand[1] && <CardMesh card={hand[1]} position={[0.15, 0, 0]} rotation={[0.2, 0.05, 0]} scale={0.4} />}
+      <CardMesh card={hand[0]} position={[-0.13, 0, 0]} rotation={[0.2, -0.05, 0]} scale={0.34} />
+      {hand[1] && <CardMesh card={hand[1]} position={[0.13, 0, 0]} rotation={[0.2, 0.05, 0]} scale={0.34} />}
     </group>
   );
 };
@@ -200,7 +200,7 @@ const PokerTable = ({ communityCards, pot, viewerPosition }: { communityCards: C
   return (
     <group>
       {/* Main table base - darker wood */}
-      <mesh receiveShadow position={[0, 0.7, 0]}>
+      <mesh position={[0, 0.7, 0]}>
         <cylinderGeometry args={[5.3, 5.3, 0.2, 64]} />
         <meshStandardMaterial 
           color="#5C3317" 
@@ -210,7 +210,7 @@ const PokerTable = ({ communityCards, pot, viewerPosition }: { communityCards: C
       </mesh>
       
       {/* Green felt playing surface - higher quality */}
-      <mesh receiveShadow position={[0, 0.81, 0]}>
+      <mesh position={[0, 0.81, 0]}>
         <cylinderGeometry args={[4.9, 4.9, 0.01, 64]} />
         <meshStandardMaterial 
           color="#0a4d2e" 
@@ -273,7 +273,7 @@ const PokerTable = ({ communityCards, pot, viewerPosition }: { communityCards: C
 
       {/* Pot indicator with better styling */}
       <group position={[0, 1.1, -1.8]}>
-        <mesh castShadow>
+        <mesh>
           <boxGeometry args={[1.8, 0.5, 0.7]} />
           <meshStandardMaterial 
             color="#d4af37" 
@@ -297,33 +297,242 @@ const PokerTable = ({ communityCards, pot, viewerPosition }: { communityCards: C
   );
 };
 
-const CloudPlatform = () => (
-  <group>
-    {/* Main floating platform - lowered to support table */}
-    <mesh position={[0, -0.5, 0]} receiveShadow castShadow>
-      <cylinderGeometry args={[8, 8, 0.4, 32]} />
-      <meshStandardMaterial color="#ffffff" roughness={0.2} metalness={0.1} />
-    </mesh>
-    {/* Platform base */}
-    <mesh position={[0, -0.8, 0]}>
-      <cylinderGeometry args={[8.2, 8.2, 0.1, 32]} />
-      <meshStandardMaterial color="#88ccff" emissive="#88ccff" emissiveIntensity={0.3} />
-    </mesh>
-    
-    {/* Cloud-like pillars */}
-    {[0, 60, 120, 180, 240, 300].map((angle, i) => {
-      const rad = angle * (Math.PI / 180);
-      const x = Math.cos(rad) * 7;
-      const z = Math.sin(rad) * 7;
-      return (
-        <mesh key={i} position={[x, -2, z]}>
-          <cylinderGeometry args={[0.6, 0.8, 2, 8]} />
-          <meshStandardMaterial color="#e0f2fe" emissive="#e0f2fe" emissiveIntensity={0.2} />
-        </mesh>
-      );
-    })}
-  </group>
-);
+// Spinning disco ball — clean mirror ball with a bright glow
+const DiscoBall = () => {
+  const ballRef = useRef<THREE.Mesh>(null);
+
+  useFrame((_, dt) => {
+    if (ballRef.current) ballRef.current.rotation.y += dt * 0.5;
+  });
+
+  return (
+    <group position={[0, 8.5, 0]}>
+      {/* Mounting rod */}
+      <mesh position={[0, 1.2, 0]}>
+        <cylinderGeometry args={[0.04, 0.04, 2.4, 8]} />
+        <meshStandardMaterial color="#333" metalness={0.9} roughness={0.2} />
+      </mesh>
+      {/* Mirror ball */}
+      <mesh ref={ballRef}>
+        <sphereGeometry args={[0.9, 32, 32]} />
+        <meshStandardMaterial color="#eee" emissive="#ffffff" emissiveIntensity={0.6} metalness={1} roughness={0.05} />
+      </mesh>
+      {/* White glow from the ball */}
+      <pointLight color="#ffffff" intensity={5} distance={12} />
+    </group>
+  );
+};
+
+// 2 strobe lights that sweep through the room and across the table
+const StrobeLights = () => {
+  const refA = useRef<THREE.PointLight>(null);
+  const refB = useRef<THREE.PointLight>(null);
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    if (refA.current) {
+      refA.current.position.set(Math.sin(t * 0.7) * 8, 5, Math.cos(t * 0.5) * 8);
+      const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+      refA.current.intensity = 15 + pulse * 20;
+    }
+    if (refB.current) {
+      refB.current.position.set(Math.sin(t * 0.5 + 3) * 8, 5, Math.cos(t * 0.8 + 2) * 8);
+      const pulse = 0.5 + 0.5 * Math.sin(t * 2.5 + 1);
+      refB.current.intensity = 15 + pulse * 20;
+    }
+  });
+
+  return (
+    <>
+      <pointLight ref={refA} color="#ff0066" distance={25} />
+      <pointLight ref={refB} color="#0066ff" distance={25} />
+    </>
+  );
+};
+
+// Bodyguard figure — huge, menacing, black suit, tie, sunglasses
+const Bodyguard = ({ position, rotation }: { position: [number, number, number]; rotation: number }) => {
+  const s = 2.2;
+  return (
+    <group position={position} rotation={[0, rotation, 0]} scale={[s, s, s]}>
+      {/* Legs — thick */}
+      <mesh position={[-0.2, 0.55, 0]}>
+        <boxGeometry args={[0.28, 1.1, 0.28]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.7} />
+      </mesh>
+      <mesh position={[0.2, 0.55, 0]}>
+        <boxGeometry args={[0.28, 1.1, 0.28]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.7} />
+      </mesh>
+      {/* Torso — wide, barrel-chested */}
+      <mesh position={[0, 1.5, 0]}>
+        <boxGeometry args={[0.85, 0.95, 0.45]} />
+        <meshStandardMaterial color="#080808" roughness={0.4} metalness={0.15} />
+      </mesh>
+      {/* Shoulders — extra bulk */}
+      <mesh position={[-0.45, 1.75, 0]}>
+        <sphereGeometry args={[0.18, 8, 8]} />
+        <meshStandardMaterial color="#080808" roughness={0.4} />
+      </mesh>
+      <mesh position={[0.45, 1.75, 0]}>
+        <sphereGeometry args={[0.18, 8, 8]} />
+        <meshStandardMaterial color="#080808" roughness={0.4} />
+      </mesh>
+      {/* Tie */}
+      <mesh position={[0, 1.45, 0.24]}>
+        <boxGeometry args={[0.1, 0.6, 0.02]} />
+        <meshStandardMaterial color="#8b0000" roughness={0.6} />
+      </mesh>
+      {/* White shirt collar peek */}
+      <mesh position={[0, 1.85, 0.16]}>
+        <boxGeometry args={[0.28, 0.12, 0.08]} />
+        <meshStandardMaterial color="#f0f0f0" />
+      </mesh>
+      {/* Neck — thick */}
+      <mesh position={[0, 2.05, 0]}>
+        <cylinderGeometry args={[0.14, 0.14, 0.18, 8]} />
+        <meshStandardMaterial color="#c49a6c" roughness={0.8} />
+      </mesh>
+      {/* Head */}
+      <mesh position={[0, 2.35, 0]}>
+        <sphereGeometry args={[0.28, 16, 16]} />
+        <meshStandardMaterial color="#c49a6c" roughness={0.8} />
+      </mesh>
+      {/* Hair — buzz cut */}
+      <mesh position={[0, 2.5, -0.03]}>
+        <sphereGeometry args={[0.25, 16, 16]} />
+        <meshStandardMaterial color="#111" />
+      </mesh>
+      {/* Sunglasses — wide dark visor */}
+      <mesh position={[0, 2.38, 0.26]}>
+        <boxGeometry args={[0.4, 0.1, 0.03]} />
+        <meshStandardMaterial color="#000" metalness={0.9} roughness={0.05} />
+      </mesh>
+      {/* Arms — thick, crossed in front */}
+      <mesh position={[-0.5, 1.35, 0.15]} rotation={[0.3, 0, 0.2]}>
+        <boxGeometry args={[0.2, 0.8, 0.2]} />
+        <meshStandardMaterial color="#080808" roughness={0.5} />
+      </mesh>
+      <mesh position={[0.5, 1.35, 0.15]} rotation={[0.3, 0, -0.2]}>
+        <boxGeometry args={[0.2, 0.8, 0.2]} />
+        <meshStandardMaterial color="#080808" roughness={0.5} />
+      </mesh>
+      {/* Fists */}
+      <mesh position={[-0.42, 0.95, 0.3]}>
+        <sphereGeometry args={[0.1, 8, 8]} />
+        <meshStandardMaterial color="#c49a6c" roughness={0.8} />
+      </mesh>
+      <mesh position={[0.42, 0.95, 0.3]}>
+        <sphereGeometry args={[0.1, 8, 8]} />
+        <meshStandardMaterial color="#c49a6c" roughness={0.8} />
+      </mesh>
+      {/* Shoes — big */}
+      <mesh position={[-0.2, 0.05, 0.08]}>
+        <boxGeometry args={[0.28, 0.1, 0.4]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.3} metalness={0.3} />
+      </mesh>
+      <mesh position={[0.2, 0.05, 0.08]}>
+        <boxGeometry args={[0.28, 0.1, 0.4]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.3} metalness={0.3} />
+      </mesh>
+    </group>
+  );
+};
+
+// Luxury casino club room environment
+const CasinoRoom = () => {
+  const wallHeight = 10;
+  const roomRadius = 16;
+
+  return (
+    <group>
+      {/* Floor */}
+      <mesh position={[0, -0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[roomRadius, 64]} />
+        <meshStandardMaterial color="#2a1218" emissive="#2a1218" emissiveIntensity={0.3} roughness={0.3} metalness={0.3} />
+      </mesh>
+      {/* Carpet accent ring under table */}
+      <mesh position={[0, -0.08, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[6.5, 10, 64]} />
+        <meshStandardMaterial color="#4a0020" emissive="#4a0020" emissiveIntensity={0.2} roughness={0.85} metalness={0} />
+      </mesh>
+
+      {/* Walls — seamless cylinder so no gaps */}
+      <mesh position={[0, wallHeight / 2 - 0.1, 0]}>
+        <cylinderGeometry args={[roomRadius, roomRadius, wallHeight, 64, 1, true]} />
+        <meshStandardMaterial color="#35161e" emissive="#35161e" emissiveIntensity={0.7} roughness={0.85} metalness={0} side={THREE.BackSide} />
+      </mesh>
+
+      {/* Gold crown moulding ring at wall top */}
+      <mesh position={[0, wallHeight - 0.3, 0]}>
+        <torusGeometry args={[roomRadius, 0.12, 8, 64]} />
+        <meshStandardMaterial color="#d4af37" emissive="#d4af37" emissiveIntensity={0.8} metalness={0.8} roughness={0.2} />
+      </mesh>
+
+      {/* Ceiling */}
+      <mesh position={[0, wallHeight, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[roomRadius, 64]} />
+        <meshStandardMaterial color="#2a1018" emissive="#2a1018" emissiveIntensity={0.5} roughness={0.9} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Gold pillar columns around the room */}
+      {[0, 60, 120, 180, 240, 300].map((deg, i) => {
+        const rad = deg * (Math.PI / 180);
+        const x = Math.cos(rad) * (roomRadius - 1);
+        const z = Math.sin(rad) * (roomRadius - 1);
+        return (
+          <group key={`pillar-${i}`}>
+            <mesh position={[x, wallHeight / 2 - 0.1, z]}>
+              <cylinderGeometry args={[0.25, 0.3, wallHeight, 12]} />
+              <meshStandardMaterial color="#d4af37" metalness={0.7} roughness={0.25} />
+            </mesh>
+            {/* Capital */}
+            <mesh position={[x, wallHeight - 0.1, z]}>
+              <cylinderGeometry args={[0.4, 0.25, 0.3, 12]} />
+              <meshStandardMaterial color="#d4af37" metalness={0.7} roughness={0.25} />
+            </mesh>
+            {/* Base */}
+            <mesh position={[x, 0, z]}>
+              <cylinderGeometry args={[0.25, 0.4, 0.3, 12]} />
+              <meshStandardMaterial color="#d4af37" metalness={0.7} roughness={0.25} />
+            </mesh>
+          </group>
+        );
+      })}
+
+      {/* Velvet rope barriers between some pillars */}
+      {[30, 90, 150, 210, 270, 330].map((deg, i) => {
+        const rad = deg * (Math.PI / 180);
+        const x = Math.cos(rad) * (roomRadius - 1.5);
+        const z = Math.sin(rad) * (roomRadius - 1.5);
+        return (
+          <group key={`rope-${i}`}>
+            {/* Rope post */}
+            <mesh position={[x, 0.5, z]}>
+              <cylinderGeometry args={[0.06, 0.06, 1, 8]} />
+              <meshStandardMaterial color="#d4af37" metalness={0.8} roughness={0.2} />
+            </mesh>
+            <mesh position={[x, 1, z]}>
+              <sphereGeometry args={[0.08, 8, 8]} />
+              <meshStandardMaterial color="#d4af37" metalness={0.8} roughness={0.2} />
+            </mesh>
+          </group>
+        );
+      })}
+
+      {/* Disco ball */}
+      <DiscoBall />
+
+      {/* 2 strobe lights that sweep room and table */}
+      <StrobeLights />
+
+      {/* Bodyguards — three menacing figures around the room */}
+      <Bodyguard position={[-12, 0, -8]} rotation={Math.PI / 4} />
+      <Bodyguard position={[12, 0, -8]} rotation={-Math.PI / 4} />
+      <Bodyguard position={[0, 0, 13]} rotation={Math.PI} />
+    </group>
+  );
+};
 
 // Positions camera at player's seat for first-person view, facing table center
 const CameraPositioner = ({ playerPosition, onInitialYaw }: { playerPosition?: [number, number, number]; onInitialYaw?: (yaw: number) => void }) => {
@@ -499,17 +708,17 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
       <LookBroadcaster isMobile={isMobile} />
       <VoiceSpatialUpdater players={players} myId={myId} />
       
-      {/* Enhanced lighting for better table visibility */}
-      <color attach="background" args={['#87CEEB']} />
-      <fog attach="fog" args={['#87CEEB', 15, 60]} />
-      <ambientLight intensity={1.5} />
-      <hemisphereLight args={['#87CEEB', '#ffffff', 1.5]} />
-      <pointLight position={[0, 8, 0]} intensity={6} castShadow />
-      <directionalLight position={[5, 8, 3]} intensity={2.5} color="#ffffff" castShadow />
-      <directionalLight position={[-5, 8, -3]} intensity={1.5} color="#ffffff" />
+      {/* Casino club atmosphere */}
+      <color attach="background" args={['#1a0e14']} />
+      <fog attach="fog" args={['#1a0e14', 25, 45]} />
+      <ambientLight intensity={2.0} color="#886666" />
+      <hemisphereLight args={['#775555', '#443333', 1.2]} />
+      {/* Main overhead light on the table */}
+      <pointLight position={[0, 7, 0]} intensity={12} color="#ffe8cc" distance={20} />
+      <directionalLight position={[3, 8, 2]} intensity={2.5} color="#ffddaa" />
 
       <PokerTable communityCards={communityCards} pot={pot} viewerPosition={user?.position} />
-      <CloudPlatform />
+      <CasinoRoom />
 
       {/* Render all players (PlayerAvatar hides self) */}
       {players.map(p => (
@@ -581,7 +790,7 @@ const GameScene: React.FC<GameSceneProps> = (props) => {
           style={{ background: 'transparent' }}
         />
       )}
-      <Canvas shadows camera={{ position: [0, 2, 6], fov: 90 }} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+      <Canvas camera={{ position: [0, 2, 6], fov: 90 }} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
         <SceneContent {...props} />
       </Canvas>
     </div>
