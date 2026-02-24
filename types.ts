@@ -50,6 +50,14 @@ export enum GameStage {
 
 export type GameVariant = 'HOLDEM' | 'OMAHA';
 
+export interface ShowdownPlayerResult {
+  playerId: string;
+  playerName: string;
+  cards: Card[];
+  handName: string;
+  isWinner: boolean;
+}
+
 export interface GameState {
   variant: GameVariant;
   stage: GameStage;

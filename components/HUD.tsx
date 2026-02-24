@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { Player, Card, GameStage, GameVariant } from '../types';
+import { Player, Card, GameStage, GameVariant, ShowdownPlayerResult } from '../types';
 import { socketService } from '../services/socketService';
 import { soundService } from '../services/soundService';
-import { EmoteType, GameLogEntry } from '../shared/protocol';
+import { EmoteType, GameLogEntry, TableConfig } from '../shared/protocol';
 import SettingsModal from './SettingsModal';
 import { evaluateBestHand } from '../utils/handEvaluator';
 
@@ -28,6 +28,8 @@ interface HUDProps {
   isHost: boolean;
   myHand: Card[];
   revealedCards: Map<string, Card[]>;
+  showdownResults: ShowdownPlayerResult[];
+  tableConfig: TableConfig;
 }
 
 const CardDisplay: React.FC<{ card: Card; size?: 'sm' | 'md' }> = ({ card, size = 'md' }) => {
@@ -54,7 +56,7 @@ const EMOTES: { key: string; emote: EmoteType; icon: string }[] = [
 
 const HUD: React.FC<HUDProps> = ({
   user, gameState, gameVariant, currentTurnIndex, players, communityCards, pot, onAction, minBet, onToggleVariant, onLeave, isLocked, isMobile,
-  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind, myHand, revealedCards
+  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind, myHand, revealedCards, showdownResults, tableConfig
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
@@ -183,8 +185,8 @@ const HUD: React.FC<HUDProps> = ({
         if (e.key === '3') { toggleRaiseSlider(); return; }
       }
 
-      // Show cards during showdown (S key) - works regardless of isLocked state
-      if ((e.key === 'S' || e.key === 's') && isShowdown && myHand.length > 0 && !hasShownCards) {
+      // Show cards during showdown (S key) - for folded players to voluntarily reveal
+      if ((e.key === 'S' || e.key === 's') && isShowdown && myHand.length > 0 && !hasShownCards && user?.isFolded) {
         e.preventDefault();
         socketService.showCards();
         setHasShownCards(true);
@@ -360,7 +362,7 @@ const HUD: React.FC<HUDProps> = ({
         </div>
 
         {/* Bottom Center: Pot, Board, and Deal Button */}
-        <div className="absolute bottom-40 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-3" style={{ zIndex: 100 }}>
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-3" style={{ zIndex: 100 }}>
           <div className="text-yellow-400 text-2xl mb-2 krunker-text bg-black/50 px-2 pointer-events-none">
             POT: ${pot}
           </div>
@@ -384,15 +386,62 @@ const HUD: React.FC<HUDProps> = ({
             ))}
           </div>
 
-          {/* Revealed Cards during Showdown */}
+          {/* Showdown Results — auto-revealed cards for all active players */}
+          {isShowdown && showdownResults.length > 0 && (
+            <div className="flex flex-col gap-2 mt-3 pointer-events-none">
+              {/* Winner Banner */}
+              {(() => {
+                const winnerResults = showdownResults.filter(r => r.isWinner);
+                const winnerNames = winnerResults.map(r => r.playerName).join(', ');
+                const handName = winnerResults[0]?.handName || '';
+                return (
+                  <div className="bg-yellow-900/90 border-2 border-yellow-400 px-4 py-2 text-center animate-pulse">
+                    <div className="text-yellow-300 text-2xl krunker-text">
+                      {winnerResults.length > 1 ? `${winnerNames} SPLIT THE POT` : `${winnerNames} WINS`}
+                    </div>
+                    <div className="text-yellow-100 text-lg">{handName}</div>
+                  </div>
+                );
+              })()}
+              {/* Each player's hand */}
+              {showdownResults.map(r => (
+                <div
+                  key={r.playerId}
+                  className={`flex items-center gap-3 px-3 py-2 rounded ${
+                    r.isWinner
+                      ? 'bg-yellow-900/70 border border-yellow-500'
+                      : 'bg-black/60 border border-gray-700'
+                  }`}
+                >
+                  <div className="flex flex-col min-w-[80px]">
+                    <span className={`text-sm krunker-text ${r.isWinner ? 'text-yellow-300' : 'text-gray-300'}`}>
+                      {r.playerName}{r.playerId === user.id ? ' (You)' : ''}
+                    </span>
+                    <span className={`text-xs ${r.isWinner ? 'text-yellow-200' : 'text-gray-400'}`}>
+                      {r.handName}
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    {r.cards.map((card, i) => (
+                      <CardDisplay key={i} card={card} size="sm" />
+                    ))}
+                  </div>
+                  {r.isWinner && <span className="text-yellow-400 text-lg ml-1">&#9733;</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Manually revealed cards (from players who folded but choose to show) */}
           {isShowdown && revealedCards.size > 0 && (
             <div className="flex flex-col gap-2 mt-2 pointer-events-none">
               {Array.from(revealedCards.entries()).map(([playerId, cards]) => {
                 const player = players.find(p => p.id === playerId);
-                if (!player || player.id === user.id) return null; // Don't show own cards here
+                if (!player) return null;
+                if (showdownResults.some(r => r.playerId === playerId)) return null;
                 return (
-                  <div key={playerId} className="flex items-center gap-2 bg-black/60 px-3 py-1 rounded">
-                    <span className="text-pink-400 text-sm krunker-text">{player.name}:</span>
+                  <div key={playerId} className="flex items-center gap-2 bg-black/60 px-3 py-1 rounded border border-pink-800">
+                    <span className="text-pink-400 text-sm krunker-text">{player.name} shows:</span>
                     <div className="flex gap-1">
                       {cards.map((card, i) => (
                         <CardDisplay key={i} card={card} size="sm" />
@@ -456,20 +505,21 @@ const HUD: React.FC<HUDProps> = ({
                 [3] RAISE
               </button>
             </div>
-          ) : isShowdown && myHand.length > 0 ? (
+          ) : isShowdown ? (
             <div className="flex flex-col gap-2 items-end">
               <div className="bg-black/70 px-4 py-2 text-yellow-300 text-xl border-r-4 border-yellow-500 krunker-text">
                 SHOWDOWN
               </div>
-              {/* Show Cards Button — works with [S] key or click */}
-              {!hasShownCards ? (
+              {/* Show Cards: only for folded players who want to voluntarily reveal */}
+              {user.isFolded && myHand.length > 0 && !hasShownCards && (
                 <button
                   onClick={() => { socketService.showCards(); setHasShownCards(true); }}
                   className="bg-pink-900/90 text-pink-100 border-2 border-pink-500 px-6 py-2 text-2xl hover:bg-pink-800 w-48 text-right"
                 >
                   [S] SHOW CARDS
                 </button>
-              ) : (
+              )}
+              {hasShownCards && (
                 <div className="bg-black/70 px-4 py-2 text-pink-400 text-lg border-r-4 border-pink-500">
                   CARDS SHOWN
                 </div>
@@ -484,7 +534,7 @@ const HUD: React.FC<HUDProps> = ({
 
         {/* Click to Play Overlay */}
         {!isLocked && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-50 pointer-events-none">
+          <div className="absolute inset-0 flex items-end justify-center pb-32 z-50 pointer-events-none">
             <div className="text-center">
               <h2 className="text-6xl text-green-500 krunker-text mb-4 animate-bounce">CLICK TO PLAY</h2>
               <div className="text-white text-2xl">Click the screen to lock pointer</div>
@@ -512,14 +562,7 @@ const HUD: React.FC<HUDProps> = ({
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
-        currentConfig={{
-          smallBlind: 10,
-          bigBlind: 20,
-          minBuyIn: 200,
-          maxBuyIn: 5000,
-          actionTimeout: 30,
-          variant: gameVariant,
-        }}
+        currentConfig={tableConfig}
         isPlaying={gameState !== GameStage.SHOWDOWN && players.some(p => !p.isFolded)}
       />
     </>

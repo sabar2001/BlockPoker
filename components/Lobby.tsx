@@ -16,6 +16,7 @@ const Lobby: React.FC<LobbyProps> = ({ onGameStart }) => {
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [error, setError] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Table config (host only)
   const [smallBlind, setSmallBlind] = useState(DEFAULT_TABLE_CONFIG.smallBlind);
@@ -110,14 +111,14 @@ const Lobby: React.FC<LobbyProps> = ({ onGameStart }) => {
             />
             <button
               onClick={() => setScreen('create')}
-              disabled={!isConnected}
+              disabled={!isConnected || !playerName.trim()}
               className="bg-green-800 hover:bg-green-700 text-white text-3xl py-4 border-2 border-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               CREATE ROOM
             </button>
             <button
               onClick={() => setScreen('join')}
-              disabled={!isConnected}
+              disabled={!isConnected || !playerName.trim()}
               className="bg-blue-800 hover:bg-blue-700 text-white text-3xl py-4 border-2 border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               JOIN ROOM
@@ -201,9 +202,17 @@ const Lobby: React.FC<LobbyProps> = ({ onGameStart }) => {
         {screen === 'waiting' && roomState && (
           <div className="flex flex-col gap-4">
             {/* Room Code */}
-            <div className="bg-gray-900 border-2 border-green-500 p-4 text-center">
-              <div className="text-gray-400 text-lg">ROOM CODE</div>
+            <div
+              className="bg-gray-900 border-2 border-green-500 p-4 text-center cursor-pointer hover:border-green-300 transition-colors"
+              onClick={() => {
+                navigator.clipboard.writeText(roomState.roomCode);
+                setCopiedCode(true);
+                setTimeout(() => setCopiedCode(false), 1500);
+              }}
+            >
+              <div className="text-gray-400 text-lg">ROOM CODE (click to copy)</div>
               <div className="text-green-400 text-5xl tracking-[0.5em] font-mono">{roomState.roomCode}</div>
+              {copiedCode && <div className="text-yellow-300 text-lg mt-1">Copied!</div>}
             </div>
 
             {/* Table Info */}

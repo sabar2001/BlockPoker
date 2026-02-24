@@ -106,8 +106,7 @@ const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ player, isUser, currentTurn
   useFrame((state, delta) => {
     if (!groupRef.current || isUser) return;
 
-    // Idle float
-    groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 3 + (parseInt(player.id) || 0)) * 0.1;
+    groupRef.current.position.y = 0;
 
     // Body faces table center
     groupRef.current.lookAt(0, 0, 0);

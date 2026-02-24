@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 // No drei Text/Html - they cause Suspense hang and black screen
 import * as THREE from 'three';
-import { Player, Card as CardType, Suit } from '../types';
+import { Player, Card as CardType, Suit, ShowdownPlayerResult } from '../types';
 import PlayerAvatar from './PlayerAvatar';
 import { socketService } from '../services/socketService';
 import { voiceService } from '../services/voiceService';
@@ -18,6 +18,7 @@ interface GameSceneProps {
   cameraRotation?: { yaw: number; pitch: number };
   onInitialYaw?: (yaw: number) => void;
   gameStage?: number;
+  showdownResults?: ShowdownPlayerResult[];
 }
 
 // Creates a canvas texture for card faces (rank + suit)
@@ -64,7 +65,7 @@ function createCardFaceTexture(rank: string, suit: string): THREE.CanvasTexture 
   return texture;
 }
 
-const CardMesh: React.FC<{ card: CardType; position: [number, number, number]; rotation?: [number, number, number]; scale?: number }> = ({ card, position, rotation = [-Math.PI / 2, 0, 0], scale = 1 }) => {
+const CardMesh: React.FC<{ card: CardType; position: [number, number, number]; rotation?: [number, number, number]; scale?: number; doubleSided?: boolean }> = ({ card, position, rotation = [-Math.PI / 2, 0, 0], scale = 1, doubleSided = false }) => {
   const faceTexture = useMemo(() => createCardFaceTexture(card.rank, card.suit), [card.rank, card.suit]);
 
   return (
@@ -77,12 +78,12 @@ const CardMesh: React.FC<{ card: CardType; position: [number, number, number]; r
       {/* Card back (blue) */}
       <mesh position={[0, 0, -0.011]} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[0.7, 1]} />
-        <meshStandardMaterial color="#3b82f6" />
+        <meshStandardMaterial color="#3b82f6" side={doubleSided ? THREE.DoubleSide : THREE.FrontSide} />
       </mesh>
       {/* Card face with rank/suit via canvas texture */}
       <mesh position={[0, 0, 0.011]}>
         <planeGeometry args={[0.7, 1]} />
-        <meshBasicMaterial map={faceTexture} transparent />
+        <meshBasicMaterial map={faceTexture} transparent side={doubleSided ? THREE.DoubleSide : THREE.FrontSide} />
       </mesh>
     </group>
   );
@@ -91,51 +92,67 @@ const CardMesh: React.FC<{ card: CardType; position: [number, number, number]; r
 const FirstPersonHand = ({ hand }: { hand: CardType[] }) => {
   const group = useRef<THREE.Group>(null);
   const { camera } = useThree();
+  const isOmaha = hand.length === 4;
 
-  useFrame((state) => {
+  useFrame(() => {
     if (group.current) {
-      const time = state.clock.getElapsedTime();
-      const bobX = Math.sin(time * 8) * 0.02;
-      const bobY = Math.sin(time * 16) * 0.02;
-
-      // 1. Copy camera position & orientation
       group.current.position.copy(camera.position);
       group.current.quaternion.copy(camera.quaternion);
 
-      // 2. Offset in camera-local space (right, down, forward)
-      group.current.translateX(0.4 + bobX);
-      group.current.translateY(-0.3 + bobY);
+      group.current.translateX(isOmaha ? 0 : 0.15);
+      group.current.translateY(-0.2);
       group.current.translateZ(-0.6);
-
-      // 3. Gentle sway — use rotateZ (quaternion multiply) instead of
-      //    setting rotation.z (which corrupts the Euler decomposition)
-      group.current.rotateZ(Math.sin(time * 2) * 0.05);
     }
   });
 
+  if (isOmaha) {
+    return (
+      <group ref={group}>
+        {/* Left hand holding first 2 cards */}
+        <mesh position={[-0.235, -0.2, 0.2]} rotation={[0.2, 0, 0]}>
+          <boxGeometry args={[0.12, 0.12, 0.5]} />
+          <meshStandardMaterial color="#ffe0bd" />
+        </mesh>
+        <CardMesh card={hand[0]} position={[-0.35, 0, 0]} rotation={[0.2, 0, 0]} scale={0.32} />
+        <CardMesh card={hand[1]} position={[-0.12, 0, 0]} rotation={[0.2, 0, 0]} scale={0.32} />
+        {/* Right hand holding last 2 cards */}
+        <mesh position={[0.235, -0.2, 0.2]} rotation={[0.2, 0, 0]}>
+          <boxGeometry args={[0.12, 0.12, 0.5]} />
+          <meshStandardMaterial color="#ffe0bd" />
+        </mesh>
+        <CardMesh card={hand[2]} position={[0.12, 0, 0]} rotation={[0.2, 0, 0]} scale={0.32} />
+        <CardMesh card={hand[3]} position={[0.35, 0, 0]} rotation={[0.2, 0, 0]} scale={0.32} />
+      </group>
+    );
+  }
+
   return (
     <group ref={group}>
-      <mesh position={[0.2, -0.2, 0.2]} rotation={[0.2, -0.2, 0]}>
+      {/* Right hand holding 2 cards */}
+      <mesh position={[0, -0.2, 0.2]} rotation={[0.2, 0, 0]}>
         <boxGeometry args={[0.15, 0.15, 0.6]} />
         <meshStandardMaterial color="#ffe0bd" />
       </mesh>
-      {hand.map((card, i) => (
-        <CardMesh
-          key={i}
-          card={card}
-          position={[-0.1 + (i * 0.15), 0, 0]}
-          rotation={[0.2, -0.1 + (i * -0.1), 0]}
-          scale={0.4}
-        />
-      ))}
+      <CardMesh card={hand[0]} position={[-0.15, 0, 0]} rotation={[0.2, -0.05, 0]} scale={0.4} />
+      {hand[1] && <CardMesh card={hand[1]} position={[0.15, 0, 0]} rotation={[0.2, 0.05, 0]} scale={0.4} />}
     </group>
   );
 };
 
-const PokerTable = ({ communityCards, pot }: { communityCards: CardType[], pot: number }) => {
+// Y rotation so community cards face the viewer (from table center toward viewer position)
+function viewerFaceYaw(viewerPosition: [number, number, number] | undefined): number {
+  if (!viewerPosition) return 0;
+  return Math.atan2(viewerPosition[0], viewerPosition[2]);
+}
+
+const PokerTable = ({ communityCards, pot, viewerPosition }: { communityCards: CardType[]; pot: number; viewerPosition?: [number, number, number] }) => {
   const cardRotations = useMemo(() => {
     return communityCards.map(() => Math.random() * 0.1);
   }, [communityCards.length]);
+  const faceYaw = viewerFaceYaw(viewerPosition);
+  // Tilt cards up so the face is readable; orient toward local player so visible from every seat
+  const cardTilt = 0.5;
+  const cardHeight = 1.02;
 
   return (
     <group>
@@ -198,13 +215,14 @@ const PokerTable = ({ communityCards, pot }: { communityCards: CardType[], pot: 
         );
       })}
 
-      {/* Community cards - raised and tilted for better visibility */}
+      {/* Community cards - raised, tilted toward viewer so readable from every seat */}
       {communityCards.map((card, i) => (
         <CardMesh
           key={i}
           card={card}
-          position={[-2 + (i * 1.0), 0.95, 0]}
-          rotation={[-Math.PI / 2 + 0.15, 0, cardRotations[i] || 0]}
+          position={[-2 + (i * 1.0), cardHeight, 0]}
+          rotation={[-Math.PI / 2 + cardTilt, faceYaw, cardRotations[i] || 0]}
+          doubleSided
         />
       ))}
 
@@ -413,7 +431,56 @@ const VoiceSpatialUpdater = ({ players, myId }: { players: Player[]; myId?: stri
   return null;
 };
 
-const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, currentTurnIndex, myId, isMobile, cameraRotation, onInitialYaw, gameStage }) => {
+// Renders face-up cards on the table in front of each player during showdown
+const ShowdownTableCards: React.FC<{ results: ShowdownPlayerResult[]; players: Player[] }> = ({ results, players }) => {
+  return (
+    <group>
+      {results.map(r => {
+        const player = players.find(p => p.id === r.playerId);
+        if (!player) return null;
+        const [px, , pz] = player.position;
+        // Place cards on table between player and center, about 60% toward center
+        const tableX = px * 0.55;
+        const tableZ = pz * 0.55;
+        const cardY = 0.88;
+        // Face cards toward center
+        const faceAngle = Math.atan2(-tableX, -tableZ);
+        const tilt = 0.5;
+
+        return (
+          <group key={r.playerId} position={[tableX, 0, tableZ]}>
+            {r.cards.map((card, i) => {
+              const offset = (i - (r.cards.length - 1) / 2) * 0.5;
+              return (
+                <CardMesh
+                  key={i}
+                  card={card}
+                  position={[
+                    offset * Math.cos(faceAngle),
+                    cardY,
+                    offset * -Math.sin(faceAngle)
+                  ]}
+                  rotation={[-Math.PI / 2 + tilt, faceAngle, 0]}
+                  scale={0.6}
+                  doubleSided
+                />
+              );
+            })}
+            {/* Winner glow ring */}
+            {r.isWinner && (
+              <mesh position={[0, 0.84, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.8, 1.0, 32]} />
+                <meshStandardMaterial color="#ffd700" emissive="#ffd700" emissiveIntensity={1.5} transparent opacity={0.7} side={THREE.DoubleSide} />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
+    </group>
+  );
+};
+
+const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, currentTurnIndex, myId, isMobile, cameraRotation, onInitialYaw, gameStage, showdownResults }) => {
   const { camera } = useThree();
   const [listener] = useState(() => new THREE.AudioListener());
 
@@ -445,7 +512,7 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
       <directionalLight position={[5, 8, 3]} intensity={2.5} color="#ffffff" castShadow />
       <directionalLight position={[-5, 8, -3]} intensity={1.5} color="#ffffff" />
 
-      <PokerTable communityCards={communityCards} pot={pot} />
+      <PokerTable communityCards={communityCards} pot={pot} viewerPosition={user?.position} />
       <CloudPlatform />
 
       {/* Render all players (PlayerAvatar hides self) */}
@@ -458,6 +525,11 @@ const SceneContent: React.FC<GameSceneProps> = ({ players, communityCards, pot, 
           audioListener={listener}
         />
       ))}
+
+      {/* Showdown: render all active players' cards face-up on the table */}
+      {gameStage === 4 && showdownResults && showdownResults.length > 0 && (
+        <ShowdownTableCards results={showdownResults} players={players} />
+      )}
 
       {/* Render User Hand FPS Style - desktop only, hide during SHOWDOWN and on mobile */}
       {user && !user.isFolded && user.hand.length > 0 && gameStage !== 4 && !isMobile && (

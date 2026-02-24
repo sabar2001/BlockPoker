@@ -1,6 +1,7 @@
 import {
   Card, GameStage, GameVariant, PlayerAction, PublicPlayer,
   GameStateBroadcast, TableConfig, DEFAULT_TABLE_CONFIG, GameLogEntry,
+  ShowdownResult,
 } from '../shared/protocol.js';
 
 // --- Deck & Card Logic ---
@@ -155,10 +156,12 @@ export class GameManager {
   minBet: number = 0;
   lastAggressorIndex: number = 0;
   winners: string[] = [];
+  showdownResults: ShowdownResult[] = [];
   players: ServerPlayer[] = [];
   isPlaying: boolean = false;
   waitingForDeal: boolean = false;
   gameLogs: GameLogEntry[] = [];
+  private pendingConfig: Partial<TableConfig> | null = null;
 
   // Action timer
   private actionTimeoutId: NodeJS.Timeout | null = null;
@@ -193,7 +196,9 @@ export class GameManager {
   }
 
   updateConfig(config: Partial<TableConfig>): void {
-    if (!this.isPlaying) {
+    if (this.isPlaying) {
+      this.pendingConfig = { ...(this.pendingConfig || {}), ...config };
+    } else {
       Object.assign(this.tableConfig, config);
       this.minBet = this.tableConfig.bigBlind;
     }
@@ -264,6 +269,10 @@ export class GameManager {
   }
 
   startNewRound(): void {
+    if (this.pendingConfig) {
+      Object.assign(this.tableConfig, this.pendingConfig);
+      this.pendingConfig = null;
+    }
     this.deck = createDeck();
     this.stage = GameStage.PREFLOP;
     this.communityCards = [];
@@ -271,6 +280,7 @@ export class GameManager {
     this.highestBet = this.tableConfig.bigBlind;
     this.minBet = this.tableConfig.bigBlind;
     this.winners = [];
+    this.showdownResults = [];
     this.waitingForDeal = false;
     this.clearActionTimer();
 
@@ -456,10 +466,10 @@ export class GameManager {
       const winner = active[0];
       winner.chips += this.pot;
       this.winners = [winner.id];
+      this.showdownResults = [];
       this.addLog('winner', `${winner.name} wins $${this.pot} (everyone else folded)`, winner.id);
       this.onRoundEnd([winner.id], this.pot);
     } else {
-      // Evaluate hands to determine winner
       let bestScore = -1;
       let winnerIds: string[] = [];
       const playerScores = new Map<string, number>();
@@ -483,20 +493,27 @@ export class GameManager {
 
       this.winners = winnerIds;
 
-      // Log each player's hand at showdown
-      for (const p of active) {
+      // Build showdown results with full card data for all active players
+      this.showdownResults = active.map(p => {
         const score = playerScores.get(p.id) || 0;
-        const handName = getHandName(score);
-        const cards = p.hand.map(c => `${c.rank}${c.suit}`).join(' ');
-        const isWinner = winnerIds.includes(p.id);
+        return {
+          playerId: p.id,
+          playerName: p.name,
+          cards: [...p.hand],
+          handName: getHandName(score),
+          isWinner: winnerIds.includes(p.id),
+        };
+      });
+
+      for (const r of this.showdownResults) {
+        const cards = r.cards.map(c => `${c.rank}${c.suit}`).join(' ');
         this.addLog(
-          isWinner ? 'winner' : 'action',
-          `${p.name}: ${cards} (${handName})${isWinner ? ' ** WINNER **' : ''}`,
-          p.id
+          r.isWinner ? 'winner' : 'action',
+          `${r.playerName}: ${cards} (${r.handName})${r.isWinner ? ' ** WINNER **' : ''}`,
+          r.playerId
         );
       }
 
-      // Log the final result
       const winnerNames = winnerIds.map(id => this.players.find(p => p.id === id)?.name).filter(Boolean).join(', ');
       const winningHandName = getHandName(bestScore);
       if (winnerIds.length === 1) {
@@ -558,6 +575,9 @@ export class GameManager {
   }
 
   getGameState(): GameStateBroadcast {
+    const effectiveConfig = this.pendingConfig
+      ? { ...this.tableConfig, ...this.pendingConfig }
+      : this.tableConfig;
     return {
       stage: this.stage, pot: this.pot,
       communityCards: this.communityCards,
@@ -567,8 +587,10 @@ export class GameManager {
       players: this.getPublicPlayers(),
       variant: this.tableConfig.variant,
       winners: this.winners.length > 0 ? this.winners : undefined,
+      showdownResults: this.showdownResults.length > 0 ? this.showdownResults : undefined,
       waitingForDeal: this.waitingForDeal,
-      gameLogs: this.gameLogs.slice(-20), // Last 20 logs
+      gameLogs: this.gameLogs.slice(-20),
+      tableConfig: effectiveConfig,
     };
   }
 

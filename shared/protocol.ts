@@ -39,6 +39,15 @@ export const DEFAULT_TABLE_CONFIG: TableConfig = {
   actionTimeout: 30,
 };
 
+// Showdown result for each player at showdown
+export interface ShowdownResult {
+  playerId: string;
+  playerName: string;
+  cards: Card[];
+  handName: string;
+  isWinner: boolean;
+}
+
 // Game log entry
 export type GameLogType = 'deal' | 'action' | 'stage' | 'winner' | 'blinds' | 'timeout' | 'rebuy' | 'show';
 
@@ -97,8 +106,10 @@ export interface GameStateBroadcast {
   players: PublicPlayer[];
   variant: GameVariant;
   winners?: string[]; // player IDs
+  showdownResults?: ShowdownResult[]; // all active players' hands at showdown
   waitingForDeal?: boolean; // true when host needs to click deal
   gameLogs?: GameLogEntry[]; // recent game logs
+  tableConfig?: TableConfig;
 }
 
 // Private hand dealt to a specific player

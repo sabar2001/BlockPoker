@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { socketService } from '../services/socketService';
 import { soundService } from '../services/soundService';
 import { EmoteType } from '../shared/protocol';
-import { Card, GameStage, GameVariant } from '../types';
+import { Card, GameStage, GameVariant, ShowdownPlayerResult } from '../types';
 import { MobileCardOverlay } from './MobileCardOverlay';
 import { evaluateBestHand } from '../utils/handEvaluator';
 
@@ -27,7 +27,18 @@ interface MobileControlsProps {
   bigBlind?: number;
   gameStage?: GameStage;
   gameVariant?: GameVariant;
+  showdownResults?: ShowdownPlayerResult[];
+  revealedCards?: Map<string, Card[]>;
 }
+
+const MiniCardDisplay: React.FC<{ card: Card }> = ({ card }) => {
+  const isRed = card.suit === '♥' || card.suit === '♦';
+  return (
+    <div className={`w-8 h-12 bg-white border border-black flex items-center justify-center shadow ${isRed ? 'text-red-600' : 'text-black'}`}>
+      <span className="text-xs font-bold font-mono">{card.rank}{card.suit}</span>
+    </div>
+  );
+};
 
 const EMOTES: { emote: EmoteType; icon: string }[] = [
   { emote: 'wave', icon: '👋' },
@@ -42,7 +53,8 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   onAction, isUserTurn, callAmount, raiseAmount, raiseLabel, onCameraRotate,
   timeRemaining = 0, waitingForDeal = false, isHost = false, roomCode = '', chips = 0, pot = 0,
   myHand = [], communityCards = [], isFolded = false, highestBet = 0, currentBet = 0, bigBlind = 20,
-  gameStage = GameStage.PREFLOP, gameVariant = 'HOLDEM' as GameVariant
+  gameStage = GameStage.PREFLOP, gameVariant = 'HOLDEM' as GameVariant,
+  showdownResults = [], revealedCards = new Map()
 }) => {
   const [startTouch, setStartTouch] = useState<{ x: number; y: number } | null>(null);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
@@ -157,7 +169,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       <div className="absolute top-6 left-6 right-6 flex justify-between pointer-events-none font-[VT323]" style={{ zIndex: 40 }}>
         <div className="bg-black/70 px-3 py-2 border-l-4 border-green-500">
           {roomCode && (
-            <div className="text-yellow-300 text-lg font-mono">ROOM: {roomCode}</div>
+            <div
+              className="text-yellow-300 text-lg font-mono cursor-pointer pointer-events-auto"
+              onClick={() => navigator.clipboard.writeText(roomCode)}
+              title="Tap to copy"
+            >
+              ROOM: {roomCode}
+            </div>
           )}
           <div className="text-white text-xl">CHIPS: ${chips}</div>
         </div>
@@ -230,8 +248,62 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
       )}
 
-      {/* Show Cards Button - During Showdown */}
-      {isShowdown && myHand.length > 0 && !hasShownCards && (
+      {/* Showdown Results Panel */}
+      {isShowdown && showdownResults.length > 0 && (
+        <div className="absolute left-4 right-4" style={{ bottom: 'max(24px, env(safe-area-inset-bottom, 24px))', zIndex: 55 }}>
+          <div className="bg-black/90 border-2 border-yellow-500 rounded-xl p-3 font-[VT323]" style={{ pointerEvents: 'auto', maxHeight: '50vh', overflowY: 'auto' }}>
+            {/* Winner banner */}
+            {(() => {
+              const winnerResults = showdownResults.filter(r => r.isWinner);
+              const winnerNames = winnerResults.map(r => r.playerName).join(', ');
+              const handName = winnerResults[0]?.handName || '';
+              return (
+                <div className="text-center mb-2 animate-pulse">
+                  <div className="text-yellow-300 text-xl">
+                    {winnerResults.length > 1 ? `${winnerNames} SPLIT` : `${winnerNames} WINS`}
+                  </div>
+                  <div className="text-yellow-100 text-sm">{handName}</div>
+                </div>
+              );
+            })()}
+            {/* Player hands */}
+            <div className="flex flex-col gap-1">
+              {showdownResults.map(r => (
+                <div
+                  key={r.playerId}
+                  className={`flex items-center gap-2 px-2 py-1 rounded ${
+                    r.isWinner ? 'bg-yellow-900/60 border border-yellow-600' : 'bg-black/40 border border-gray-700'
+                  }`}
+                >
+                  <div className="flex flex-col min-w-[60px]">
+                    <span className={`text-xs ${r.isWinner ? 'text-yellow-300' : 'text-gray-300'}`}>{r.playerName}</span>
+                    <span className={`text-xs ${r.isWinner ? 'text-yellow-200' : 'text-gray-500'}`}>{r.handName}</span>
+                  </div>
+                  <div className="flex gap-0.5">
+                    {r.cards.map((card, i) => (
+                      <MiniCardDisplay key={i} card={card} />
+                    ))}
+                  </div>
+                  {r.isWinner && <span className="text-yellow-400 text-sm ml-auto">&#9733;</span>}
+                </div>
+              ))}
+            </div>
+            {/* Show Cards for folded player */}
+            {isFolded && myHand.length > 0 && !hasShownCards && (
+              <button
+                onClick={() => { socketService.showCards(); setHasShownCards(true); }}
+                onTouchStart={(e) => { e.stopPropagation(); socketService.showCards(); setHasShownCards(true); }}
+                className="mt-2 bg-pink-900/90 text-pink-100 text-lg font-bold px-6 py-2 w-full rounded-lg border border-pink-500 active:scale-95 transition-transform"
+              >
+                SHOW CARDS
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback: Show cards button when no showdown results (everyone folded) */}
+      {isShowdown && showdownResults.length === 0 && isFolded && myHand.length > 0 && !hasShownCards && (
         <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 'max(100px, calc(env(safe-area-inset-bottom, 24px) + 80px))', zIndex: 55 }}>
           <button
             onClick={() => { socketService.showCards(); setHasShownCards(true); }}
@@ -243,7 +315,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           </button>
         </div>
       )}
-      {isShowdown && hasShownCards && (
+      {isShowdown && hasShownCards && showdownResults.length === 0 && (
         <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none" style={{ bottom: 'max(100px, calc(env(safe-area-inset-bottom, 24px) + 80px))', zIndex: 55 }}>
           <div className="bg-black/70 text-pink-400 text-xl px-6 py-3 rounded-xl border border-pink-500 font-[VT323]">
             CARDS SHOWN

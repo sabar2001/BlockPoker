@@ -49,7 +49,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
 
         {isPlaying && (
           <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-200 px-4 py-2 mb-4 text-center text-lg">
-            Settings cannot be changed during active round
+            Changes will be applied in the next hand
           </div>
         )}
 
@@ -61,8 +61,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
                 type="number"
                 value={smallBlind}
                 onChange={(e) => setSmallBlind(Number(e.target.value))}
-                disabled={isPlaying}
-                className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center disabled:opacity-50"
+                className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center"
                 min="1"
               />
             </div>
@@ -73,8 +72,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
                 type="number"
                 value={bigBlind}
                 onChange={(e) => setBigBlind(Number(e.target.value))}
-                disabled={isPlaying}
-                className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center disabled:opacity-50"
+                className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center"
                 min="2"
               />
             </div>
@@ -85,8 +83,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
                 type="number"
                 value={minBuyIn}
                 onChange={(e) => setMinBuyIn(Number(e.target.value))}
-                disabled={isPlaying}
-                className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center disabled:opacity-50"
+                className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center"
                 min="10"
               />
             </div>
@@ -97,8 +94,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
                 type="number"
                 value={maxBuyIn}
                 onChange={(e) => setMaxBuyIn(Number(e.target.value))}
-                disabled={isPlaying}
-                className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center disabled:opacity-50"
+                className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center"
                 min="100"
               />
             </div>
@@ -110,8 +106,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
               type="number"
               value={actionTimeout}
               onChange={(e) => setActionTimeout(Math.max(5, Math.min(120, Number(e.target.value))))}
-              disabled={isPlaying}
-              className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center disabled:opacity-50"
+              className="w-full bg-gray-800 border-2 border-gray-600 text-white text-2xl px-3 py-2 text-center"
               min="5"
               max="120"
             />
@@ -123,8 +118,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
             <div className="flex gap-3">
               <button
                 onClick={() => setVariant('HOLDEM')}
-                disabled={isPlaying}
-                className={`flex-1 py-3 text-2xl border-2 transition-colors disabled:opacity-50 ${
+                className={`flex-1 py-3 text-2xl border-2 transition-colors ${
                   variant === 'HOLDEM'
                     ? 'bg-green-800 border-green-500 text-white'
                     : 'bg-gray-800 border-gray-600 text-gray-400'
@@ -134,8 +128,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
               </button>
               <button
                 onClick={() => setVariant('OMAHA')}
-                disabled={isPlaying}
-                className={`flex-1 py-3 text-2xl border-2 transition-colors disabled:opacity-50 ${
+                className={`flex-1 py-3 text-2xl border-2 transition-colors ${
                   variant === 'OMAHA'
                     ? 'bg-green-800 border-green-500 text-white'
                     : 'bg-gray-800 border-gray-600 text-gray-400'
@@ -156,8 +149,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentC
           </button>
           <button
             onClick={handleSave}
-            disabled={isPlaying}
-            className="flex-1 bg-green-800 hover:bg-green-700 text-white text-2xl py-3 border-2 border-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-green-800 hover:bg-green-700 text-white text-2xl py-3 border-2 border-green-500 transition-colors"
           >
             SAVE
           </button>

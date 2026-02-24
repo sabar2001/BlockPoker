@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { socketService } from './services/socketService';
 import { voiceService } from './services/voiceService';
 import { soundService } from './services/soundService';
-import { GameStateBroadcast, HandDeal, PublicPlayer, Card as ProtoCard, GameStage as ProtoGameStage, GameLogEntry } from './shared/protocol';
+import { GameStateBroadcast, HandDeal, PublicPlayer, Card as ProtoCard, GameStage as ProtoGameStage, GameLogEntry, TableConfig, DEFAULT_TABLE_CONFIG } from './shared/protocol';
 import { PLAYER_POSITIONS } from './constants';
-import { Player, GameStage, Card } from './types';
+import { Player, GameStage, Card, ShowdownPlayerResult } from './types';
 import GameScene from './components/GameScene';
 import HUD from './components/HUD';
 import Lobby from './components/Lobby';
@@ -62,13 +62,15 @@ const App: React.FC = () => {
   const [cameraRotation, setCameraRotation] = useState({ yaw: 0, pitch: -0.3 });
   
   // New state for game UI improvements
+  const [tableConfig, setTableConfig] = useState<TableConfig>(DEFAULT_TABLE_CONFIG);
   const [gameLogs, setGameLogs] = useState<GameLogEntry[]>([]);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [currentTimerPlayerId, setCurrentTimerPlayerId] = useState<string>('');
   const [waitingForDeal, setWaitingForDeal] = useState(false);
   const [roomCode, setRoomCode] = useState<string>('');
   const [hostId, setHostId] = useState<string>(''); // Track who is the host
-  const [revealedCards, setRevealedCards] = useState<Map<string, Card[]>>(new Map()); // playerId -> revealed cards
+  const [revealedCards, setRevealedCards] = useState<Map<string, Card[]>>(new Map());
+  const [showdownResults, setShowdownResults] = useState<ShowdownPlayerResult[]>([]);
 
   // Refs for tracking state changes to trigger sounds
   const prevCommunityCountRef = useRef(0);
@@ -113,7 +115,16 @@ const App: React.FC = () => {
         setHighestBet(state.highestBet);
         setBigBlind(state.minBet || 20);
         setWinners(state.winners || []);
+        if (state.showdownResults) {
+          setShowdownResults(state.showdownResults.map(r => ({
+            ...r,
+            cards: r.cards.map(toClientCard),
+          })));
+        }
         setWaitingForDeal(state.waitingForDeal || false);
+        if (state.tableConfig) {
+          setTableConfig(state.tableConfig);
+        }
         if (state.gameLogs) {
           setGameLogs(state.gameLogs);
         }
@@ -135,6 +146,7 @@ const App: React.FC = () => {
       socketService.on('game:new-round', () => {
         setMyHand([]);
         setWinners([]);
+        setShowdownResults([]);
         setRevealedCards(new Map());
         soundService.playNewRound();
       }),
@@ -311,6 +323,7 @@ const App: React.FC = () => {
         cameraRotation={cameraRotation}
         onInitialYaw={handleInitialYaw}
         gameStage={gameStage}
+        showdownResults={showdownResults}
       />
 
       {isMobile ? (
@@ -335,6 +348,8 @@ const App: React.FC = () => {
           bigBlind={bigBlind}
           gameStage={gameStage}
           gameVariant={gameVariant}
+          showdownResults={showdownResults}
+          revealedCards={revealedCards}
         />
       ) : (
         <HUD
@@ -358,6 +373,8 @@ const App: React.FC = () => {
           isHost={isHost}
           myHand={myHand}
           revealedCards={revealedCards}
+          showdownResults={showdownResults}
+          tableConfig={tableConfig}
         />
       )}
     </div>

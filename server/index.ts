@@ -35,7 +35,9 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
       'http://localhost:3000',
       'http://localhost:5173',
       'http://127.0.0.1:3000',
+      'http://127.0.0.1:5173',
       'http://10.0.0.30:3000',
+      'http://10.0.0.30:5173',
       'https://pokerpov-wocm.onrender.com', // Add the explicit HTTPS URL
       /\.onrender\.com$/,                    // Simplified regex
     ],
