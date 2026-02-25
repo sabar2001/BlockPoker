@@ -1,7 +1,7 @@
 import {
   Card, GameStage, GameVariant, PlayerAction, PublicPlayer,
   GameStateBroadcast, TableConfig, DEFAULT_TABLE_CONFIG, GameLogEntry,
-  ShowdownResult,
+  ShowdownResult, SidePotInfo,
 } from '../shared/protocol.js';
 
 // --- Deck & Card Logic ---
@@ -127,6 +127,7 @@ interface ServerPlayer {
   isFolded: boolean;
   isAllIn: boolean;
   currentBet: number;
+  totalRoundBet: number; // total chips put in this round (across all streets)
   seatIndex: number;
   color: string;
   hasActed: boolean;
@@ -220,9 +221,10 @@ export class GameManager {
       name,
       chips,
       hand: [],
-      isFolded: this.isPlaying && !this.waitingForDeal, // If joining mid-game, mark as folded unless waiting for deal
+      isFolded: this.isPlaying && !this.waitingForDeal,
       isAllIn: false,
       currentBet: 0,
+      totalRoundBet: 0,
       seatIndex,
       color: PLAYER_COLORS[seatIndex % PLAYER_COLORS.length],
       hasActed: false,
@@ -289,6 +291,7 @@ export class GameManager {
       p.isFolded = p.chips <= 0 || !p.isConnected;
       p.isAllIn = false;
       p.currentBet = 0;
+      p.totalRoundBet = 0;
       p.hasActed = false;
       p.chatMessage = undefined;
     }
@@ -322,10 +325,14 @@ export class GameManager {
       const sbAmount = Math.min(this.players[sbIdx].chips, this.tableConfig.smallBlind);
       this.players[sbIdx].chips -= sbAmount;
       this.players[sbIdx].currentBet = sbAmount;
+      this.players[sbIdx].totalRoundBet = sbAmount;
+      if (this.players[sbIdx].chips === 0) this.players[sbIdx].isAllIn = true;
 
       const bbAmount = Math.min(this.players[bbIdx].chips, this.tableConfig.bigBlind);
       this.players[bbIdx].chips -= bbAmount;
       this.players[bbIdx].currentBet = bbAmount;
+      this.players[bbIdx].totalRoundBet = bbAmount;
+      if (this.players[bbIdx].chips === 0) this.players[bbIdx].isAllIn = true;
 
       this.pot = sbAmount + bbAmount;
       this.lastAggressorIndex = bbIdx;
@@ -361,11 +368,14 @@ export class GameManager {
       const actualBet = Math.min(player.chips, callAmt);
       player.chips -= actualBet;
       player.currentBet += actualBet;
+      player.totalRoundBet += actualBet;
       this.pot += actualBet;
       if (player.chips === 0) player.isAllIn = true;
       
       if (callAmt === 0) {
         this.addLog('action', `${player.name} checks`, player.id);
+      } else if (player.isAllIn) {
+        this.addLog('action', `${player.name} calls all-in $${actualBet}`, player.id);
       } else {
         this.addLog('action', `${player.name} calls $${actualBet}`, player.id);
       }
@@ -375,6 +385,7 @@ export class GameManager {
       const actualBet = Math.min(player.chips, needed);
       player.chips -= actualBet;
       player.currentBet += actualBet;
+      player.totalRoundBet += actualBet;
       this.pot += actualBet;
       if (player.chips === 0) player.isAllIn = true;
 
@@ -457,6 +468,86 @@ export class GameManager {
     setTimeout(() => this.handleShowdown(), 1000);
   }
 
+  private buildSidePots(): { amount: number; eligible: string[]; label: string }[] {
+    // Collect all players who contributed (not just active — folded players contributed too)
+    const contributors = this.players.filter(p => p.totalRoundBet > 0);
+    const active = this.players.filter(p => !p.isFolded);
+
+    if (contributors.length === 0) return [{ amount: this.pot, eligible: active.map(p => p.id), label: 'Main Pot' }];
+
+    // Get sorted unique contribution levels from all-in players
+    const allInLevels = contributors
+      .filter(p => p.isAllIn)
+      .map(p => p.totalRoundBet)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .sort((a, b) => a - b);
+
+    // If no one is all-in, single pot
+    if (allInLevels.length === 0) {
+      return [{ amount: this.pot, eligible: active.map(p => p.id), label: 'Main Pot' }];
+    }
+
+    const pots: { amount: number; eligible: string[]; label: string }[] = [];
+    let previousLevel = 0;
+    let potIndex = 0;
+
+    for (const level of allInLevels) {
+      const diff = level - previousLevel;
+      if (diff <= 0) continue;
+
+      // Each player contributes min(diff, their remaining contribution above previousLevel)
+      let potAmount = 0;
+      const eligible: string[] = [];
+
+      for (const p of contributors) {
+        const contrib = Math.min(diff, Math.max(0, p.totalRoundBet - previousLevel));
+        potAmount += contrib;
+        // Eligible to win if not folded and contributed at least up to this level
+        if (!p.isFolded && p.totalRoundBet >= level) {
+          eligible.push(p.id);
+        }
+      }
+
+      if (potAmount > 0 && eligible.length > 0) {
+        pots.push({
+          amount: potAmount,
+          eligible,
+          label: potIndex === 0 ? 'Main Pot' : `Side Pot ${potIndex}`,
+        });
+        potIndex++;
+      }
+      previousLevel = level;
+    }
+
+    // Remaining pot from players who bet more than the highest all-in level
+    const maxAllIn = allInLevels[allInLevels.length - 1];
+    let remainingAmount = 0;
+    const remainingEligible: string[] = [];
+
+    for (const p of contributors) {
+      const excess = Math.max(0, p.totalRoundBet - maxAllIn);
+      remainingAmount += excess;
+      if (!p.isFolded && p.totalRoundBet > maxAllIn) {
+        remainingEligible.push(p.id);
+      }
+    }
+
+    if (remainingAmount > 0 && remainingEligible.length > 0) {
+      pots.push({
+        amount: remainingAmount,
+        eligible: remainingEligible,
+        label: potIndex === 0 ? 'Main Pot' : `Side Pot ${potIndex}`,
+      });
+    }
+
+    // If somehow we built no pots (edge case), fall back to single pot
+    if (pots.length === 0) {
+      return [{ amount: this.pot, eligible: active.map(p => p.id), label: 'Main Pot' }];
+    }
+
+    return pots;
+  }
+
   private handleShowdown(): void {
     this.clearActionTimer();
     this.stage = GameStage.SHOWDOWN;
@@ -470,30 +561,58 @@ export class GameManager {
       this.addLog('winner', `${winner.name} wins $${this.pot} (everyone else folded)`, winner.id);
       this.onRoundEnd([winner.id], this.pot);
     } else {
-      let bestScore = -1;
-      let winnerIds: string[] = [];
-      const playerScores = new Map<string, number>();
+      // Build side pots (handles all-in scenarios)
+      const sidePots = this.buildSidePots();
 
+      const playerScores = new Map<string, number>();
       for (const p of active) {
         const score = bestHandScore(p.hand, this.communityCards, this.tableConfig.variant);
         playerScores.set(p.id, score);
-        if (score > bestScore) {
-          bestScore = score;
-          winnerIds = [p.id];
-        } else if (score === bestScore) {
-          winnerIds.push(p.id);
+      }
+
+      const allWinnerIds = new Set<string>();
+      let totalWinAmount = 0;
+
+      for (const sp of sidePots) {
+        // Find the best hand among eligible players for this pot
+        let bestScore = -1;
+        let potWinnerIds: string[] = [];
+
+        for (const pid of sp.eligible) {
+          const score = playerScores.get(pid);
+          if (score === undefined) continue;
+          if (score > bestScore) {
+            bestScore = score;
+            potWinnerIds = [pid];
+          } else if (score === bestScore) {
+            potWinnerIds.push(pid);
+          }
+        }
+
+        const share = Math.floor(sp.amount / potWinnerIds.length);
+        for (const id of potWinnerIds) {
+          const p = this.players.find(pl => pl.id === id);
+          if (p) p.chips += share;
+          allWinnerIds.add(id);
+        }
+        totalWinAmount += share;
+
+        // Log side pot results
+        const potWinnerNames = potWinnerIds.map(id => this.players.find(p => p.id === id)?.name).filter(Boolean).join(', ');
+        const handName = getHandName(bestScore);
+        if (sidePots.length > 1) {
+          if (potWinnerIds.length === 1) {
+            this.addLog('winner', `${potWinnerNames} wins ${sp.label} $${sp.amount} with ${handName}`, potWinnerIds[0]);
+          } else {
+            this.addLog('winner', `${potWinnerNames} split ${sp.label} $${sp.amount} ($${share} each) with ${handName}`);
+          }
         }
       }
 
-      const winAmount = Math.floor(this.pot / winnerIds.length);
-      for (const id of winnerIds) {
-        const p = this.players.find(pl => pl.id === id);
-        if (p) p.chips += winAmount;
-      }
-
+      const winnerIds = Array.from(allWinnerIds);
       this.winners = winnerIds;
 
-      // Build showdown results with full card data for all active players
+      // Build showdown results
       this.showdownResults = active.map(p => {
         const score = playerScores.get(p.id) || 0;
         return {
@@ -501,7 +620,7 @@ export class GameManager {
           playerName: p.name,
           cards: [...p.hand],
           handName: getHandName(score),
-          isWinner: winnerIds.includes(p.id),
+          isWinner: allWinnerIds.has(p.id),
         };
       });
 
@@ -514,15 +633,20 @@ export class GameManager {
         );
       }
 
-      const winnerNames = winnerIds.map(id => this.players.find(p => p.id === id)?.name).filter(Boolean).join(', ');
-      const winningHandName = getHandName(bestScore);
-      if (winnerIds.length === 1) {
-        this.addLog('winner', `${winnerNames} wins $${winAmount} with ${winningHandName}`, winnerIds[0]);
-      } else {
-        this.addLog('winner', `${winnerNames} split $${this.pot} ($${winAmount} each) with ${winningHandName}`);
+      // Summary log (only for single-pot games to avoid duplication)
+      if (sidePots.length === 1) {
+        const winnerNames = winnerIds.map(id => this.players.find(p => p.id === id)?.name).filter(Boolean).join(', ');
+        const bestScore = Math.max(...Array.from(playerScores.values()));
+        const winningHandName = getHandName(bestScore);
+        const winAmount = Math.floor(this.pot / winnerIds.length);
+        if (winnerIds.length === 1) {
+          this.addLog('winner', `${winnerNames} wins $${winAmount} with ${winningHandName}`, winnerIds[0]);
+        } else {
+          this.addLog('winner', `${winnerNames} split $${this.pot} ($${winAmount} each) with ${winningHandName}`);
+        }
       }
       
-      this.onRoundEnd(winnerIds, winAmount);
+      this.onRoundEnd(winnerIds, totalWinAmount);
     }
 
     this.onStateChange();
@@ -591,6 +715,7 @@ export class GameManager {
       waitingForDeal: this.waitingForDeal,
       gameLogs: this.gameLogs.slice(-20),
       tableConfig: effectiveConfig,
+      sidePots: this.isPlaying ? this.buildSidePots() : undefined,
     };
   }
 

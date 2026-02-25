@@ -378,7 +378,9 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
             className="bg-blue-900/90 backdrop-blur text-white text-2xl font-bold px-6 py-5 rounded-xl border-3 border-blue-500 active:scale-95 transition-transform shadow-lg min-w-[140px] min-h-[70px] font-[VT323]"
             style={{ pointerEvents: 'auto' }}
           >
-            {callAmount > 0 ? `CALL ${callAmount}` : 'CHECK'}
+            {callAmount > 0
+              ? (chips <= callAmount ? `ALL IN $${chips}` : `CALL $${callAmount}`)
+              : 'CHECK'}
           </button>
           <button 
             onClick={() => setShowRaiseSlider(prev => !prev)}

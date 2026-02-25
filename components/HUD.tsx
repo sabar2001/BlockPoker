@@ -30,6 +30,7 @@ interface HUDProps {
   revealedCards: Map<string, Card[]>;
   showdownResults: ShowdownPlayerResult[];
   tableConfig: TableConfig;
+  sidePots: { amount: number; label: string }[];
 }
 
 const CardDisplay: React.FC<{ card: Card; size?: 'sm' | 'md' }> = ({ card, size = 'md' }) => {
@@ -56,7 +57,7 @@ const EMOTES: { key: string; emote: EmoteType; icon: string }[] = [
 
 const HUD: React.FC<HUDProps> = ({
   user, gameState, gameVariant, currentTurnIndex, players, communityCards, pot, onAction, minBet, onToggleVariant, onLeave, isLocked, isMobile,
-  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind, myHand, revealedCards, showdownResults, tableConfig
+  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind, myHand, revealedCards, showdownResults, tableConfig, sidePots
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
@@ -366,6 +367,15 @@ const HUD: React.FC<HUDProps> = ({
           <div className="text-yellow-400 text-2xl mb-2 krunker-text bg-black/50 px-2 pointer-events-none flex items-baseline gap-1">
             POT: <span key={pot} className="inline-block animate-pot-bump">${pot}</span>
           </div>
+          {sidePots.length > 0 && (
+            <div className="flex gap-2 mb-1 pointer-events-none">
+              {sidePots.map((sp, i) => (
+                <div key={i} className="bg-black/60 border border-yellow-600 px-2 py-0.5 text-yellow-300 text-sm krunker-text">
+                  {sp.label}: ${sp.amount}
+                </div>
+              ))}
+            </div>
+          )}
           
           {/* Deal Button - only for host when waiting - HIGH Z-INDEX */}
           {isHost && waitingForDeal && (
@@ -502,7 +512,9 @@ const HUD: React.FC<HUDProps> = ({
                 [1] FOLD
               </button>
               <button onClick={() => { soundService.playChip(); onAction('call'); }} className="bg-blue-900/90 text-blue-100 border-2 border-blue-500 px-6 py-2 text-2xl hover:bg-blue-800 w-48 text-right">
-                [2] {callAmount > 0 ? `CALL ${callAmount}` : 'CHECK'}
+                [2] {callAmount > 0
+                  ? (user.chips <= callAmount ? `ALL IN $${user.chips}` : `CALL $${callAmount}`)
+                  : 'CHECK'}
               </button>
               <button onClick={() => setShowRaiseSlider(prev => !prev)} className="bg-yellow-900/90 text-yellow-100 border-2 border-yellow-500 px-6 py-2 text-2xl hover:bg-yellow-800 w-48 text-right">
                 [3] RAISE

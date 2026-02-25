@@ -71,6 +71,7 @@ const App: React.FC = () => {
   const [hostId, setHostId] = useState<string>(''); // Track who is the host
   const [revealedCards, setRevealedCards] = useState<Map<string, Card[]>>(new Map());
   const [showdownResults, setShowdownResults] = useState<ShowdownPlayerResult[]>([]);
+  const [sidePots, setSidePots] = useState<{ amount: number; label: string }[]>([]);
 
   // Refs for tracking state changes to trigger sounds
   const prevCommunityCountRef = useRef(0);
@@ -122,6 +123,11 @@ const App: React.FC = () => {
           })));
         }
         setWaitingForDeal(state.waitingForDeal || false);
+        if (state.sidePots && state.sidePots.length > 1) {
+          setSidePots(state.sidePots.map(sp => ({ amount: sp.amount, label: sp.label })));
+        } else {
+          setSidePots([]);
+        }
         if (state.tableConfig) {
           setTableConfig(state.tableConfig);
         }
@@ -148,6 +154,7 @@ const App: React.FC = () => {
         setWinners([]);
         setShowdownResults([]);
         setRevealedCards(new Map());
+        setSidePots([]);
         soundService.playNewRound();
       }),
 
@@ -374,6 +381,7 @@ const App: React.FC = () => {
           revealedCards={revealedCards}
           showdownResults={showdownResults}
           tableConfig={tableConfig}
+          sidePots={sidePots}
         />
       )}
     </div>

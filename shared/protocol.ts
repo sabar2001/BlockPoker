@@ -94,6 +94,13 @@ export interface RoomState {
   maxPlayers: number;
 }
 
+// Side pot info for display
+export interface SidePotInfo {
+  amount: number;
+  eligible: string[];
+  label: string;
+}
+
 // Game state broadcast to all players
 export interface GameStateBroadcast {
   stage: GameStage;
@@ -110,6 +117,7 @@ export interface GameStateBroadcast {
   waitingForDeal?: boolean; // true when host needs to click deal
   gameLogs?: GameLogEntry[]; // recent game logs
   tableConfig?: TableConfig;
+  sidePots?: SidePotInfo[];
 }
 
 // Private hand dealt to a specific player
