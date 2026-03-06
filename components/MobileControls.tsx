@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { socketService } from '../services/socketService';
 import { soundService } from '../services/soundService';
-import { EmoteType } from '../shared/protocol';
+import { EmoteType, PlayerLedgerEntry } from '../shared/protocol';
 import { Card, GameStage, GameVariant, ShowdownPlayerResult } from '../types';
 import { MobileCardOverlay } from './MobileCardOverlay';
 import { evaluateBestHand } from '../utils/handEvaluator';
@@ -29,6 +29,7 @@ interface MobileControlsProps {
   gameVariant?: GameVariant;
   showdownResults?: ShowdownPlayerResult[];
   revealedCards?: Map<string, Card[]>;
+  ledger?: PlayerLedgerEntry[];
 }
 
 const MiniCardDisplay: React.FC<{ card: Card }> = ({ card }) => {
@@ -54,7 +55,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   timeRemaining = 0, waitingForDeal = false, isHost = false, roomCode = '', chips = 0, pot = 0,
   myHand = [], communityCards = [], isFolded = false, highestBet = 0, currentBet = 0, bigBlind = 20,
   gameStage = GameStage.PREFLOP, gameVariant = 'HOLDEM' as GameVariant,
-  showdownResults = [], revealedCards = new Map()
+  showdownResults = [], revealedCards = new Map(), ledger = []
 }) => {
   const [startTouch, setStartTouch] = useState<{ x: number; y: number } | null>(null);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
@@ -64,7 +65,9 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   const [rebuyPending, setRebuyPending] = useState(false);
   const [rebuyMessage, setRebuyMessage] = useState('');
   const [hasShownCards, setHasShownCards] = useState(false);
-  const rotation = useRef({ yaw: 0, pitch: -0.3 }); // Initialize with correct starting pitch
+  const [showEmoteMenu, setShowEmoteMenu] = useState(false);
+  const [showLedger, setShowLedger] = useState(false);
+  const rotation = useRef({ yaw: 0, pitch: -0.3 });
 
   const isShowdown = gameStage === GameStage.SHOWDOWN;
 
@@ -179,12 +182,20 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           )}
           <div className="text-white text-xl">CHIPS: ${chips}</div>
         </div>
-        <div className="bg-black/70 px-3 py-2 border-r-4 border-yellow-500">
-          <div className="text-yellow-400 text-xl">POT: <span key={pot} className="inline-block animate-pot-bump">${pot}</span></div>
-          {/* Best Hand Indicator */}
-          {bestHandName && myHand.length > 0 && !isFolded && (
-            <div className="text-cyan-400 text-lg mt-1">{bestHandName}</div>
-          )}
+        <div className="flex flex-col items-end gap-1">
+          <div className="bg-black/70 px-3 py-2 border-r-4 border-yellow-500">
+            <div className="text-yellow-400 text-xl">POT: <span key={pot} className="inline-block animate-pot-bump">${pot}</span></div>
+            {bestHandName && myHand.length > 0 && !isFolded && (
+              <div className="text-cyan-400 text-lg mt-1">{bestHandName}</div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowLedger(true)}
+            onTouchStart={(e) => { e.stopPropagation(); setShowLedger(true); }}
+            className="bg-purple-900/80 active:bg-purple-800 text-white text-sm px-3 py-1 border border-purple-500 rounded pointer-events-auto"
+          >
+            📊 LEDGER
+          </button>
         </div>
       </div>
       
@@ -393,22 +404,34 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
       )}
 
-      {/* Emote Bar - Bottom left, above action buttons */}
-      <div 
-        className="absolute left-6 flex gap-3" 
+      {/* Emote Toggle + Expandable Menu */}
+      <div
+        className="absolute left-6 flex flex-col items-start gap-2"
         style={{ bottom: 'max(100px, calc(env(safe-area-inset-bottom, 24px) + 76px))', zIndex: 50 }}
       >
-        {EMOTES.map((em) => (
-          <button
-            key={em.emote}
-            onClick={() => socketService.sendEmote(em.emote as EmoteType)}
-            onTouchStart={(e) => { e.stopPropagation(); socketService.sendEmote(em.emote as EmoteType); }}
-            className="bg-black/80 backdrop-blur active:bg-black/95 border-2 border-gray-500 active:border-gray-300 w-14 h-14 flex items-center justify-center text-3xl rounded-xl shadow-lg transition-all active:scale-90"
-            style={{ pointerEvents: 'auto' }}
-          >
-            {em.icon}
-          </button>
-        ))}
+        {showEmoteMenu && (
+          <div className="flex gap-2 animate-fade-in">
+            {EMOTES.map((em) => (
+              <button
+                key={em.emote}
+                onClick={() => { socketService.sendEmote(em.emote as EmoteType); setShowEmoteMenu(false); }}
+                onTouchStart={(e) => { e.stopPropagation(); socketService.sendEmote(em.emote as EmoteType); setShowEmoteMenu(false); }}
+                className="bg-black/80 backdrop-blur active:bg-black/95 border-2 border-gray-500 active:border-gray-300 w-12 h-12 flex items-center justify-center text-2xl rounded-xl shadow-lg transition-all active:scale-90"
+                style={{ pointerEvents: 'auto' }}
+              >
+                {em.icon}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => setShowEmoteMenu(prev => !prev)}
+          onTouchStart={(e) => { e.stopPropagation(); setShowEmoteMenu(prev => !prev); }}
+          className="bg-black/80 backdrop-blur active:bg-black/95 border-2 border-gray-500 px-4 h-12 flex items-center gap-2 text-xl rounded-xl shadow-lg transition-all active:scale-95 text-white font-[VT323]"
+          style={{ pointerEvents: 'auto' }}
+        >
+          😀 {showEmoteMenu ? '▼' : '▶'}
+        </button>
       </div>
 
       {/* Mobile Start Overlay */}
@@ -416,6 +439,43 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none" style={{ zIndex: 2 }}>
           <div className="text-white text-lg bg-black/50 px-4 py-2 rounded">
             Swipe to look around
+          </div>
+        </div>
+      )}
+
+      {/* Ledger Modal */}
+      {showLedger && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 font-[VT323]"
+          onClick={() => setShowLedger(false)}
+          onTouchStart={(e) => e.stopPropagation()}
+          style={{ pointerEvents: 'auto' }}
+        >
+          <div className="bg-gray-900 border-4 border-purple-500 p-4 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-2xl text-purple-400 krunker-text">PLAYER LEDGER</h2>
+              <button onClick={() => setShowLedger(false)} className="text-gray-400 hover:text-white text-2xl">✕</button>
+            </div>
+            {ledger.length === 0 ? (
+              <div className="text-gray-500 text-center text-lg py-6">No game data yet</div>
+            ) : (
+              <div className="space-y-2">
+                {ledger.map((entry) => (
+                  <div key={entry.playerId} className={`bg-black/40 border border-gray-700 p-2 rounded ${!entry.isConnected ? 'opacity-50' : ''}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: entry.playerColor }} />
+                      <span className="text-white text-lg">{entry.playerName}</span>
+                      {!entry.isConnected && <span className="text-red-400 text-xs">(left)</span>}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div><span className="text-gray-400">Hands: </span><span className="text-gray-200">{entry.handsPlayed}</span></div>
+                      <div><span className="text-gray-400">Wins: </span><span className="text-yellow-400">{entry.handsWon}</span></div>
+                      <div><span className="text-gray-400">Net: </span><span className={entry.chipsNet >= 0 ? 'text-green-400' : 'text-red-400'}>{entry.chipsNet >= 0 ? '+' : ''}{entry.chipsNet}</span></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

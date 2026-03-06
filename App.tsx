@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { socketService } from './services/socketService';
 import { voiceService } from './services/voiceService';
 import { soundService } from './services/soundService';
-import { GameStateBroadcast, HandDeal, PublicPlayer, Card as ProtoCard, GameStage as ProtoGameStage, GameLogEntry, TableConfig, DEFAULT_TABLE_CONFIG } from './shared/protocol';
+import { GameStateBroadcast, HandDeal, PublicPlayer, Card as ProtoCard, GameStage as ProtoGameStage, GameLogEntry, TableConfig, DEFAULT_TABLE_CONFIG, PlayerLedgerEntry } from './shared/protocol';
 import { PLAYER_POSITIONS } from './constants';
 import { Player, GameStage, Card, ShowdownPlayerResult } from './types';
 import GameScene from './components/GameScene';
@@ -72,6 +72,7 @@ const App: React.FC = () => {
   const [revealedCards, setRevealedCards] = useState<Map<string, Card[]>>(new Map());
   const [showdownResults, setShowdownResults] = useState<ShowdownPlayerResult[]>([]);
   const [sidePots, setSidePots] = useState<{ amount: number; label: string }[]>([]);
+  const [ledger, setLedger] = useState<PlayerLedgerEntry[]>([]);
 
   // Refs for tracking state changes to trigger sounds
   const prevCommunityCountRef = useRef(0);
@@ -133,6 +134,9 @@ const App: React.FC = () => {
         }
         if (state.gameLogs) {
           setGameLogs(state.gameLogs);
+        }
+        if (state.ledger) {
+          setLedger(state.ledger);
         }
       }),
 
@@ -356,6 +360,7 @@ const App: React.FC = () => {
           gameVariant={gameVariant}
           showdownResults={showdownResults}
           revealedCards={revealedCards}
+          ledger={ledger}
         />
       ) : (
         <HUD
@@ -382,6 +387,7 @@ const App: React.FC = () => {
           showdownResults={showdownResults}
           tableConfig={tableConfig}
           sidePots={sidePots}
+          ledger={ledger}
         />
       )}
     </div>

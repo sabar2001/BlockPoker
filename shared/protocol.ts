@@ -94,6 +94,20 @@ export interface RoomState {
   maxPlayers: number;
 }
 
+// Player ledger entry — cumulative stats for the session (including disconnected players)
+export interface PlayerLedgerEntry {
+  playerId: string;
+  playerName: string;
+  playerColor: string;
+  handsPlayed: number;
+  handsWon: number;
+  chipsWon: number;    // total chips awarded from pots
+  chipsBuyIn: number;  // total chips bought in (initial + rebuys)
+  chipsNet: number;    // current chips + chipsWon - chipsBuyIn (net profit/loss)
+  isConnected: boolean;
+  currentChips: number;
+}
+
 // Side pot info for display
 export interface SidePotInfo {
   amount: number;
@@ -118,6 +132,7 @@ export interface GameStateBroadcast {
   gameLogs?: GameLogEntry[]; // recent game logs
   tableConfig?: TableConfig;
   sidePots?: SidePotInfo[];
+  ledger?: PlayerLedgerEntry[];
 }
 
 // Private hand dealt to a specific player
