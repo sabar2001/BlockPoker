@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { Player, Card, GameStage, GameVariant, ShowdownPlayerResult } from '../types';
 import { socketService } from '../services/socketService';
 import { soundService } from '../services/soundService';
-import { EmoteType, GameLogEntry, TableConfig } from '../shared/protocol';
+import { EmoteType, GameLogEntry, TableConfig, PlayerLedgerEntry } from '../shared/protocol';
 import SettingsModal from './SettingsModal';
 import { evaluateBestHand } from '../utils/handEvaluator';
 
@@ -31,6 +31,7 @@ interface HUDProps {
   showdownResults: ShowdownPlayerResult[];
   tableConfig: TableConfig;
   sidePots: { amount: number; label: string }[];
+  ledger: PlayerLedgerEntry[];
 }
 
 const CardDisplay: React.FC<{ card: Card; size?: 'sm' | 'md' }> = ({ card, size = 'md' }) => {
@@ -57,10 +58,13 @@ const EMOTES: { key: string; emote: EmoteType; icon: string }[] = [
 
 const HUD: React.FC<HUDProps> = ({
   user, gameState, gameVariant, currentTurnIndex, players, communityCards, pot, onAction, minBet, onToggleVariant, onLeave, isLocked, isMobile,
-  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind, myHand, revealedCards, showdownResults, tableConfig, sidePots
+  roomCode, gameLogs, timeRemaining, waitingForDeal, isHost, bigBlind, myHand, revealedCards, showdownResults, tableConfig, sidePots, ledger
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showRaiseSlider, setShowRaiseSlider] = useState(false);
+  const [showEmoteMenu, setShowEmoteMenu] = useState(false);
+  const [showLedger, setShowLedger] = useState(false);
+  const [showKeybinds, setShowKeybinds] = useState(false);
   const showRaiseSliderRef = useRef(false);
   const [rebuyAmount, setRebuyAmount] = useState(1000);
   const [rebuyError, setRebuyError] = useState('');
@@ -279,7 +283,7 @@ const HUD: React.FC<HUDProps> = ({
               </div>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {onLeave && (
               <button onClick={onLeave} className="bg-red-900/80 hover:bg-red-800 text-white text-sm px-3 py-1 border border-red-500">
                 LEAVE TABLE
@@ -290,13 +294,19 @@ const HUD: React.FC<HUDProps> = ({
                 ⚙️ SETTINGS
               </button>
             )}
+            <button onClick={() => setShowLedger(true)} className="bg-purple-900/80 hover:bg-purple-800 text-white text-sm px-3 py-1 border border-purple-500">
+              📊 LEDGER
+            </button>
+            <button onClick={() => setShowKeybinds(prev => !prev)} className="bg-gray-700/80 hover:bg-gray-600 text-white text-sm px-3 py-1 border border-gray-500">
+              ⌨️ KEYBINDS
+            </button>
           </div>
         </div>
 
-        {/* Top Right: Game Log Feed */}
+        {/* Top Right: Actions History Feed */}
         <div className="absolute top-4 right-4 w-96 pointer-events-auto" style={{ zIndex: 100 }}>
           <div className="bg-black/60 border-l-4 border-yellow-500 p-3">
-            <div className="text-yellow-400 text-xl mb-2 krunker-text">GAME LOG</div>
+            <div className="text-yellow-400 text-xl mb-2 krunker-text">ACTIONS HISTORY</div>
             <div ref={logRef} className="h-48 overflow-y-auto space-y-1">
               {gameLogs.slice(-20).map((log) => (
                 <div key={log.id} className={`text-sm ${getLogColor(log.type)}`}>
@@ -350,15 +360,25 @@ const HUD: React.FC<HUDProps> = ({
               <div className="text-green-300 text-sm animate-pulse">{rebuyMessage}</div>
             </div>
           )}
-          {/* Emote bar */}
-          <div className="flex gap-1 mt-2">
-            {EMOTES.map(em => (
-              <button key={em.key} onClick={() => socketService.sendEmote(em.emote)}
-                className="pointer-events-auto bg-black/50 hover:bg-black/80 border border-gray-700 w-8 h-8 flex items-center justify-center text-sm"
-                title={`[${em.key}] ${em.emote}`}>
-                {em.icon}
-              </button>
-            ))}
+          {/* Emote toggle menu */}
+          <div className="relative mt-2 pointer-events-auto">
+            <button
+              onClick={() => setShowEmoteMenu(prev => !prev)}
+              className="bg-black/60 hover:bg-black/80 border border-gray-600 px-3 py-1 text-white text-lg flex items-center gap-2"
+            >
+              <span>😀</span> EMOTES {showEmoteMenu ? '▼' : '▶'}
+            </button>
+            {showEmoteMenu && (
+              <div className="flex gap-1 mt-1 animate-fade-in">
+                {EMOTES.map(em => (
+                  <button key={em.key} onClick={() => { socketService.sendEmote(em.emote); setShowEmoteMenu(false); }}
+                    className="bg-black/50 hover:bg-black/80 border border-gray-700 w-10 h-10 flex items-center justify-center text-lg"
+                    title={`[${em.key}] ${em.emote}`}>
+                    {em.icon}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -500,24 +520,21 @@ const HUD: React.FC<HUDProps> = ({
                     onClick={() => { soundService.playRaise(); onAction('raise', raiseValueRef.current); setShowRaiseSlider(false); showRaiseSliderRef.current = false; }}
                     className="bg-yellow-800 hover:bg-yellow-700 text-white text-xl py-2 w-full border border-yellow-500"
                   >
-                    [ENTER] RAISE ${raiseValue}
+                    RAISE ${raiseValue}
                   </button>
-                  <div className="text-gray-500 text-xs mt-1 text-center">
-                    ← → adjust | Shift: big steps | Enter: confirm
-                  </div>
                 </div>
               )}
 
               <button onClick={() => { soundService.playFold(); onAction('fold'); }} className="bg-red-900/90 text-red-100 border-2 border-red-500 px-6 py-2 text-2xl hover:bg-red-800 w-48 text-right">
-                [1] FOLD
+                FOLD
               </button>
               <button onClick={() => { soundService.playChip(); onAction('call'); }} className="bg-blue-900/90 text-blue-100 border-2 border-blue-500 px-6 py-2 text-2xl hover:bg-blue-800 w-48 text-right">
-                [2] {callAmount > 0
+                {callAmount > 0
                   ? (user.chips <= callAmount ? `ALL IN $${user.chips}` : `CALL $${callAmount}`)
                   : 'CHECK'}
               </button>
               <button onClick={() => setShowRaiseSlider(prev => !prev)} className="bg-yellow-900/90 text-yellow-100 border-2 border-yellow-500 px-6 py-2 text-2xl hover:bg-yellow-800 w-48 text-right">
-                [3] RAISE
+                RAISE
               </button>
             </div>
           ) : isShowdown ? (
@@ -531,7 +548,7 @@ const HUD: React.FC<HUDProps> = ({
                   onClick={() => { socketService.showCards(); setHasShownCards(true); }}
                   className="bg-pink-900/90 text-pink-100 border-2 border-pink-500 px-6 py-2 text-2xl hover:bg-pink-800 w-48 text-right"
                 >
-                  [S] SHOW CARDS
+                  SHOW CARDS
                 </button>
               )}
               {hasShownCards && (
@@ -554,10 +571,7 @@ const HUD: React.FC<HUDProps> = ({
               <h2 className="text-6xl text-green-500 krunker-text mb-4 animate-bounce">CLICK TO PLAY</h2>
               <div className="text-white text-2xl">Click the screen to lock pointer</div>
               {!isMobile && (
-                <>
-                  <div className="text-gray-400 mt-2">Keys 1-3: Actions | Keys 4-9: Emotes</div>
-                  <div className="text-yellow-400 mt-3 text-xl">Press ESC to unlock and access UI</div>
-                </>
+                <div className="text-yellow-400 mt-3 text-xl">Press ESC to unlock and access UI</div>
               )}
             </div>
           </div>
@@ -573,6 +587,77 @@ const HUD: React.FC<HUDProps> = ({
         )}
       </div>
       
+      {/* Keybinds Panel — floating panel near top-left */}
+      {showKeybinds && !isMobile && (
+        <div className="fixed top-24 left-4 z-[110] pointer-events-auto font-[VT323]">
+          <div className="bg-black/90 border-2 border-gray-500 p-4 w-72">
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-gray-300 text-xl krunker-text">KEYBINDS</div>
+              <button onClick={() => setShowKeybinds(false)} className="text-gray-400 hover:text-white text-lg">✕</button>
+            </div>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-gray-400">Fold</span><span className="text-white">1</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">Call / Check</span><span className="text-white">2</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">Raise</span><span className="text-white">3</span></div>
+              <div className="border-t border-gray-700 my-1" />
+              <div className="flex justify-between"><span className="text-gray-400">Emotes</span><span className="text-white">4-9</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">Show Cards</span><span className="text-white">S</span></div>
+              <div className="border-t border-gray-700 my-1" />
+              <div className="flex justify-between"><span className="text-gray-400">Raise ← →</span><span className="text-white">Arrows</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">Big Steps</span><span className="text-white">Shift+Arrows</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">Confirm Raise</span><span className="text-white">Enter</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">Cancel / Unlock</span><span className="text-white">Escape</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ledger Modal */}
+      {showLedger && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 pointer-events-auto font-[VT323]" onClick={() => setShowLedger(false)}>
+          <div className="bg-gray-900 border-4 border-purple-500 p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-3xl text-purple-400 krunker-text">PLAYER LEDGER</h2>
+              <button onClick={() => setShowLedger(false)} className="text-gray-400 hover:text-white text-2xl">✕</button>
+            </div>
+            {ledger.length === 0 ? (
+              <div className="text-gray-500 text-center text-xl py-8">No game data yet. Play a hand!</div>
+            ) : (
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b-2 border-purple-800 text-gray-400 text-lg">
+                    <th className="py-2 px-2">PLAYER</th>
+                    <th className="py-2 px-2 text-center">HANDS</th>
+                    <th className="py-2 px-2 text-center">WINS</th>
+                    <th className="py-2 px-2 text-right">CHIPS WON</th>
+                    <th className="py-2 px-2 text-right">BUY-IN</th>
+                    <th className="py-2 px-2 text-right">NET</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.map((entry) => (
+                    <tr key={entry.playerId} className={`border-b border-gray-800 text-lg ${!entry.isConnected ? 'opacity-50' : ''}`}>
+                      <td className="py-2 px-2 flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: entry.playerColor }} />
+                        <span className="text-white">{entry.playerName}</span>
+                        {!entry.isConnected && <span className="text-red-400 text-xs">(left)</span>}
+                      </td>
+                      <td className="py-2 px-2 text-center text-gray-300">{entry.handsPlayed}</td>
+                      <td className="py-2 px-2 text-center text-yellow-400">{entry.handsWon}</td>
+                      <td className="py-2 px-2 text-right text-green-400">${entry.chipsWon}</td>
+                      <td className="py-2 px-2 text-right text-gray-400">${entry.chipsBuyIn}</td>
+                      <td className={`py-2 px-2 text-right font-bold ${entry.chipsNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {entry.chipsNet >= 0 ? '+' : ''}{entry.chipsNet}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Settings Modal */}
       <SettingsModal
         isOpen={showSettings}

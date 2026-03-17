@@ -1,7 +1,7 @@
 import {
   Card, GameStage, GameVariant, PlayerAction, PublicPlayer,
   GameStateBroadcast, TableConfig, DEFAULT_TABLE_CONFIG, GameLogEntry,
-  ShowdownResult, SidePotInfo,
+  ShowdownResult, SidePotInfo, PlayerLedgerEntry,
 } from '../shared/protocol.js';
 
 // --- Deck & Card Logic ---
@@ -162,6 +162,7 @@ export class GameManager {
   isPlaying: boolean = false;
   waitingForDeal: boolean = false;
   gameLogs: GameLogEntry[] = [];
+  private playerLedger: Map<string, PlayerLedgerEntry> = new Map();
   private pendingConfig: Partial<TableConfig> | null = null;
 
   // Action timer
@@ -235,6 +236,27 @@ export class GameManager {
       isConnected: true,
     };
     this.players.push(player);
+
+    // Initialize ledger entry for this player
+    if (!this.playerLedger.has(id)) {
+      this.playerLedger.set(id, {
+        playerId: id,
+        playerName: name,
+        playerColor: player.color,
+        handsPlayed: 0,
+        handsWon: 0,
+        chipsWon: 0,
+        chipsBuyIn: chips,
+        chipsNet: 0,
+        isConnected: true,
+        currentChips: chips,
+      });
+    } else {
+      const entry = this.playerLedger.get(id)!;
+      entry.isConnected = true;
+      entry.currentChips = chips;
+    }
+
     console.log(`[GameManager] Player ${name} (${id}) joined. isPlaying=${this.isPlaying}, waitingForDeal=${this.waitingForDeal}, isFolded=${player.isFolded}`);
     return player;
   }
@@ -242,6 +264,14 @@ export class GameManager {
   removePlayer(id: string): void {
     const idx = this.players.findIndex(p => p.id === id);
     if (idx === -1) return;
+
+    // Update ledger: mark disconnected and snapshot current chips
+    const ledgerEntry = this.playerLedger.get(id);
+    if (ledgerEntry) {
+      ledgerEntry.isConnected = false;
+      ledgerEntry.currentChips = this.players[idx].chips;
+      ledgerEntry.chipsNet = ledgerEntry.currentChips - ledgerEntry.chipsBuyIn;
+    }
 
     if (this.isPlaying) {
       this.players[idx].isConnected = false;
@@ -301,6 +331,12 @@ export class GameManager {
       this.isPlaying = false;
       this.onStateChange();
       return;
+    }
+
+    // Update ledger: count hands played for active players
+    for (const p of active) {
+      const entry = this.playerLedger.get(p.id);
+      if (entry) entry.handsPlayed++;
     }
 
     this.addLog('deal', `New ${this.tableConfig.variant} round started`);
@@ -558,6 +594,10 @@ export class GameManager {
       winner.chips += this.pot;
       this.winners = [winner.id];
       this.showdownResults = [];
+      // Update ledger
+      const wEntry = this.playerLedger.get(winner.id);
+      if (wEntry) { wEntry.handsWon++; wEntry.chipsWon += this.pot; }
+      this.updateLedgerChips();
       this.addLog('winner', `${winner.name} wins $${this.pot} (everyone else folded)`, winner.id);
       this.onRoundEnd([winner.id], this.pot);
     } else {
@@ -593,6 +633,8 @@ export class GameManager {
         for (const id of potWinnerIds) {
           const p = this.players.find(pl => pl.id === id);
           if (p) p.chips += share;
+          const entry = this.playerLedger.get(id);
+          if (entry) entry.chipsWon += share;
           allWinnerIds.add(id);
         }
         totalWinAmount += share;
@@ -611,6 +653,13 @@ export class GameManager {
 
       const winnerIds = Array.from(allWinnerIds);
       this.winners = winnerIds;
+
+      // Update ledger for winners
+      for (const id of winnerIds) {
+        const entry = this.playerLedger.get(id);
+        if (entry) entry.handsWon++;
+      }
+      this.updateLedgerChips();
 
       // Build showdown results
       this.showdownResults = active.map(p => {
@@ -716,6 +765,7 @@ export class GameManager {
       gameLogs: this.gameLogs.slice(-20),
       tableConfig: effectiveConfig,
       sidePots: this.isPlaying ? this.buildSidePots() : undefined,
+      ledger: this.getLedger(),
     };
   }
 
@@ -753,6 +803,12 @@ export class GameManager {
 
     const chips = Math.max(this.tableConfig.minBuyIn, Math.min(this.tableConfig.maxBuyIn, amount));
     p.chips = chips;
+    // Track rebuy in ledger
+    const entry = this.playerLedger.get(playerId);
+    if (entry) {
+      entry.chipsBuyIn += chips;
+      entry.currentChips = chips;
+    }
     // Do NOT set isFolded = false here. startNewRound() already checks
     // p.isFolded = p.chips <= 0 || !p.isConnected, so the player will
     // naturally be included in the next hand once they have chips.
@@ -830,6 +886,22 @@ export class GameManager {
       this.actionTimerIntervalId = null;
     }
     this.actionTimeRemaining = 0;
+  }
+
+  private updateLedgerChips(): void {
+    for (const p of this.players) {
+      const entry = this.playerLedger.get(p.id);
+      if (entry) {
+        entry.currentChips = p.chips;
+        entry.chipsNet = p.chips - entry.chipsBuyIn;
+      }
+    }
+  }
+
+  getLedger(): PlayerLedgerEntry[] {
+    // Update chips for connected players
+    this.updateLedgerChips();
+    return Array.from(this.playerLedger.values());
   }
 
   cleanup(): void {

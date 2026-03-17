@@ -1,106 +1,84 @@
-# BlockPoker Context Documentation
+# PokerPov Context Documentation
 
-Quick reference guide for understanding and extending the Blocky Bluff 3D multiplayer poker game.
+Quick reference guide for understanding and extending the PokerPov multiplayer poker game.
 
 ## Contents
 
-1. **[README.md](README.md)** - Quick overview of the project with fast facts and common entry points
+1. **[README.md](README.md)** - Quick overview (you are here)
 2. **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, data flow, and core patterns
 3. **[COMPONENTS.md](COMPONENTS.md)** - Detailed component API and function reference
 4. **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development workflow, debugging, and deployment
+5. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Lookup tables, file map, constants
+6. **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - High-level overview, decisions, roadmap
 
 ## Quick Facts
 
 **Type**: Browser-based multiplayer poker game with proximity voice chat  
-**Current Status**: Single-player with AI bots (multiplayer in development)  
-**Stack**: React + TypeScript + Three.js + WebRTC (planned)  
+**Status**: Fully functional multiplayer via Socket.io + WebRTC voice  
+**Stack**: React 18.2 + TypeScript 5.8 + Three.js/R3F (client) | Node.js + Express + Socket.io (server)  
 **Game Modes**: Texas Hold'em, Omaha  
-**Players**: Up to 9 players per table  
+**Players**: Up to 9 per table  
+**Voice**: Peer-to-peer WebRTC with spatial audio processing
 
 ## Project Structure
 
 ```
-BlockPoker/
-├── components/        # React components (GameScene, HUD, PlayerAvatar)
-├── services/          # Pure logic (pokerLogic, geminiService)
-├── .context/          # This documentation folder
-├── App.tsx            # Main game controller
-├── types.ts           # TypeScript interfaces
-├── constants.ts       # Game configuration
-└── index.tsx/html     # Entry points
+PokerPov/
+├── components/
+│   ├── GameScene.tsx        # 3D scene, camera, table, avatars
+│   ├── HUD.tsx              # Desktop UI overlay (actions, emotes, ledger, keybinds)
+│   ├── MobileControls.tsx   # Mobile touch controls, actions, emotes, ledger
+│   ├── MobileCardOverlay.tsx# Mobile card display
+│   ├── PlayerAvatar.tsx     # 3D player models with head tracking
+│   ├── Lobby.tsx            # Room create/join, buy-in, ready state
+│   └── SettingsModal.tsx    # Table settings (host-only)
+├── services/
+│   ├── socketService.ts     # Socket.io client wrapper
+│   ├── voiceService.ts      # WebRTC peer-to-peer voice chat
+│   ├── soundService.ts      # Game sound effects
+│   └── pokerLogic.ts        # Client-side poker helpers
+├── utils/
+│   ├── handEvaluator.ts     # Hand evaluation for display
+│   └── deviceDetection.ts   # Mobile/touch detection
+├── shared/
+│   └── protocol.ts          # Shared types and Socket.io event contracts
+├── server/
+│   ├── index.ts             # Express + Socket.io entry point
+│   ├── GameManager.ts       # Authoritative poker logic + player ledger
+│   └── RoomManager.ts       # Room/lobby management
+├── App.tsx                  # Main app, server-driven state
+├── types.ts                 # Client types
+├── constants.ts             # Table positions, colors
+└── vite.config.ts           # Vite config
 ```
-
-## Key Technologies
-
-- **React Three Fiber** - 3D rendering in React
-- **Three.js** - WebGL 3D engine with spatial audio
-- **WebRTC** (planned) - P2P multiplayer and voice chat
-- **Google Gemini** - AI test bots (development only)
-- **Vite** - Build tool
-- **TailwindCSS** - Styling
 
 ## Core Game Loop
 
-1. Deal cards (2 for Hold'em, 4 for Omaha)
-2. Post blinds (SB: $10, BB: $20)
-3. Betting rounds: Preflop → Flop → Turn → River
-4. Showdown: Evaluate hands, award pot
-5. Rotate dealer, repeat
+1. Host creates room with table settings (blinds, buy-in range, variant)
+2. Players join via 6-character room code, choose buy-in
+3. All ready up → host starts game
+4. Server deals cards, posts blinds, manages betting rounds
+5. Preflop → Flop → Turn → River → Showdown
+6. Winner(s) awarded pot, ledger updated, auto-deals next hand
 
-## Bot AI
+## Key Features
 
-- Evaluates hand strength based on community cards
-- Makes decisions: fold/call/raise (strength + randomness)
-- Generates contextual chat 15% of the time (Gemini)
-- Speech synthesized to spatial audio at bot position
-- **Purpose**: Testing and practice before multiplayer launch
-
-## Common Entry Points
-
-### Modify Game Rules
-→ `constants.ts`, `services/pokerLogic.ts`
-
-### Change UI/UX
-→ `components/HUD.tsx`, `components/GameScene.tsx`
-
-### Adjust Bot Behavior (Testing Only)
-→ `App.tsx` (`handleBotTurn()`)
-
-### Implement Multiplayer
-→ Start with WebRTC signaling server, then peer connections
-
-### Add Voice Chat
-→ Extend spatial audio system to handle WebRTC streams
+- **Player Ledger**: Tracks hands played, hands won, chips won, buy-in totals, and net profit/loss for all players including disconnected ones
+- **Actions History**: Real-time game log (formerly "Game Log") showing all actions, deals, and results
+- **Emote Menu**: Expandable click-to-open menu (mobile-friendly, replaces keybind-only emotes)
+- **Keybinds Panel**: Accessible via button on desktop, hidden on mobile
+- **Proximity Voice**: WebRTC spatial audio with distance-based volume
+- **Configurable Tables**: Blinds, buy-in range, action timeout, variant selection
 
 ## Environment Setup
 
 ```bash
-npm install
-echo "GEMINI_API_KEY=your_key" > .env.local
-npm run dev
+npm install                          # Client deps
+cd server && npm install && cd ..    # Server deps
+npm run dev:all                      # Both (client :3000, server :3001)
 ```
 
-## Debugging Tips
-
-- Check browser console for API errors
-- Verify `currentTurnIndex` matches expected player
-- Ensure audio context is resumed (requires user gesture)
-- Test both Hold'em and Omaha modes
-
-## Architecture Highlights
-
-- **State Management**: Centralized in `App.tsx`
-- **Rendering**: React Three Fiber hooks (`useFrame`, `useThree`)
-- **Audio**: Spatial audio with Three.js PositionalAudio
-- **AI**: Async Gemini calls with error fallbacks
-- **3D Layout**: Elliptical player positions around table
-
-## Performance Notes
-
-- Gemini thinking disabled for speed
-- Bot chat throttled to reduce API calls
-- Simple box geometry for blocky aesthetic
-- Pointer lock required for FPS controls
+No database, Docker, or environment variables required for local development.
 
 ---
 

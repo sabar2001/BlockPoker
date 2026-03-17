@@ -4,189 +4,158 @@
 
 | File | Purpose | Key Exports |
 |------|---------|-------------|
-| `App.tsx` | Game state & controller | App component, game loop logic |
-| `types.ts` | Type definitions | Card, Player, GameState, GameStage, GameVariant |
-| `constants.ts` | Configuration values | INITIAL_CHIPS, BIG_BLIND, PLAYER_POSITIONS |
-| `components/GameScene.tsx` | 3D environment | GameScene, CardMesh, PokerTable, FirstPersonHand |
-| `components/HUD.tsx` | 2D UI overlay | HUD component with action buttons |
-| `components/PlayerAvatar.tsx` | Bot 3D models | PlayerAvatar with spatial audio |
-| `services/pokerLogic.ts` | Poker rules engine | createDeck, evaluateHandStrength, determineWinners |
-| `services/geminiService.ts` | AI integration | generateBotChat, generateBotSpeech |
-| `index.tsx` | React mount point | ReactDOM.render |
-| `index.html` | HTML shell | Import maps, TailwindCSS CDN |
-| `vite.config.ts` | Build config | Environment variable injection |
-
-## State Structure
-
-```typescript
-// App.tsx main state
-players: Player[] // 9 players (index 0 = user)
-gameState: {
-  variant: 'HOLDEM' | 'OMAHA'
-  stage: GameStage // PREFLOP, FLOP, TURN, RIVER, SHOWDOWN
-  pot: number
-  communityCards: Card[]
-  deck: Card[]
-  currentTurnIndex: number
-  dealerIndex: number
-  highestBet: number
-  minBet: number
-  lastAggressorIndex: number
-  winners: Player[]
-}
-hasStarted: boolean
-micVolume: number
-```
-
-## Function Reference
-
-### App.tsx
-
-| Function | Parameters | Description |
-|----------|------------|-------------|
-| `initAudioAndGame()` | - | Setup audio context, start game |
-| `handleToggleVariant()` | - | Switch Hold'em ↔ Omaha |
-| `startNewRound(variant)` | GameVariant | Deal cards, post blinds, reset state |
-| `nextStage()` | - | Advance game stage, deal community cards |
-| `handleShowdown(players, cards)` | Player[], Card[] | Determine winners, award pot |
-| `handleBotTurn(bot)` | Player | Bot AI decision making |
-| `processAction(id, action, amt)` | string, 'fold'\|'call'\|'raise', number | Execute player action |
-| `checkRoundCompletion(...)` | - | Check if betting round complete |
-| `moveToNextPlayer(players)` | Player[] | Increment turn index |
-| `updatePlayerChat(id, text)` | string, string | Display chat bubble |
-| `handleUserAction(action, amt)` | 'fold'\|'call'\|'raise', number | User action handler |
-
-### services/pokerLogic.ts
-
-| Function | Return Type | Description |
-|----------|-------------|-------------|
-| `createDeck()` | Card[] | Shuffled 52-card deck |
-| `dealCards(deck, count)` | {hand, remainingDeck} | Extract N cards |
-| `evaluateHandStrength(hole, comm, variant)` | number | Calculate hand score |
-| `determineWinners(players, comm, variant)` | Player[] | Find best hand(s) |
-
-### services/geminiService.ts
-
-| Function | Return Type | Description |
-|----------|-------------|-------------|
-| `generateBotChat(name, context, personality)` | Promise\<string\> | Generate chat text |
-| `generateBotSpeech(text)` | Promise\<string\|undefined\> | Generate audio PCM |
-
-## Constants
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `INITIAL_CHIPS` | 1000 | Starting chip count |
-| `BIG_BLIND` | 20 | Big blind amount |
-| `SMALL_BLIND` | 10 | Small blind amount |
-| `PLAYER_POSITIONS` | [x,y,z][] | 9 positions around table |
-| `PLAYER_NAMES` | string[] | Bot names |
-| `PLAYER_COLORS` | string[] | Hex colors for avatars |
+| `App.tsx` | Game state & controller | App component, socket event subscriptions |
+| `types.ts` | Client type definitions | Card, Player, GameState, GameStage, GameVariant |
+| `constants.ts` | Configuration values | PLAYER_POSITIONS, PLAYER_COLORS, SUITS, RANKS |
+| `shared/protocol.ts` | Shared types (client+server) | Socket events, PlayerLedgerEntry, TableConfig |
+| `components/GameScene.tsx` | 3D environment | GameScene, PokerTable, FirstPersonHand |
+| `components/HUD.tsx` | Desktop UI overlay | HUD (actions, ledger, emotes, keybinds) |
+| `components/MobileControls.tsx` | Mobile touch controls | MobileControls (actions, emotes, ledger) |
+| `components/MobileCardOverlay.tsx` | Mobile card display | MobileCardOverlay |
+| `components/PlayerAvatar.tsx` | 3D player models | PlayerAvatar with head tracking |
+| `components/Lobby.tsx` | Pre-game room management | Lobby |
+| `components/SettingsModal.tsx` | Table settings (host) | SettingsModal |
+| `services/socketService.ts` | Socket.io client | socketService singleton |
+| `services/voiceService.ts` | WebRTC voice chat | voiceService singleton |
+| `services/soundService.ts` | Game sound effects | soundService singleton |
+| `services/pokerLogic.ts` | Client poker helpers | (legacy, minimal usage) |
+| `utils/handEvaluator.ts` | Hand name display | evaluateBestHand |
+| `utils/deviceDetection.ts` | Mobile detection | isMobileDevice, isTouchDevice |
+| `server/index.ts` | Server entry point | Express + Socket.io setup |
+| `server/GameManager.ts` | Poker logic (authoritative) | GameManager class |
+| `server/RoomManager.ts` | Room management | RoomManager class |
 
 ## Game Stages
 
 ```typescript
 enum GameStage {
-  PREFLOP,   // Initial betting (0 community cards)
-  FLOP,      // 3 community cards
-  TURN,      // 4 community cards
-  RIVER,     // 5 community cards
-  SHOWDOWN   // Reveal hands, determine winner
+  PREFLOP = 0,  // Initial betting (0 community cards)
+  FLOP = 1,     // 3 community cards
+  TURN = 2,     // 4 community cards
+  RIVER = 3,    // 5 community cards
+  SHOWDOWN = 4  // Reveal hands, determine winner
 }
 ```
 
-## Bot Decision Logic
+## Socket Events (Client → Server)
 
-```typescript
-// In handleBotTurn()
-if (handStrength > threshold && random > 0.3) {
-  action = 'raise'
-} else if (handStrength > threshold/4 || callAmount === 0 || random > 0.6) {
-  action = 'call'
-} else {
-  action = 'fold'
-}
+| Event | Payload | Purpose |
+|-------|---------|---------|
+| `room:create` | `{ playerName, buyIn, tableConfig? }` | Create room |
+| `room:join` | `{ roomCode, playerName, buyIn }` | Join room |
+| `room:leave` | — | Leave room |
+| `room:ready` | `{ ready }` | Toggle ready |
+| `room:settings` | `{ tableConfig? }` | Update settings (host) |
+| `game:start` | — | Start game (host) |
+| `game:action` | `{ action, amount? }` | Fold/call/raise |
+| `game:deal` | — | Deal next round (host) |
+| `game:rebuy` | `{ amount }` | Rebuy chips |
+| `game:show-cards` | — | Reveal hand at showdown |
+| `player:look` | `{ yaw, pitch }` | Head direction |
+| `player:emote` | `{ emote }` | Send emote |
+| `player:chat` | `{ message }` | Chat message |
 
-// Chat generation: 15% chance (random > 0.85)
-```
+## Socket Events (Server → Client)
 
-## Hand Strength Thresholds
-
-- **Hold'em**: 100 (base), 25 (min for call)
-- **Omaha**: 500 (base), 125 (min for call)
-
-## Scoring Values
-
-| Hand | Score Modifier |
-|------|----------------|
-| High Card | +value (2-14) |
-| Pair | +1000 |
-| Two Pair | +2000 |
-| Three of a Kind | +3000 |
-| Straight | +4000 |
-| Flush | +5000 |
-| Full House | +6000 |
-| Four of a Kind | +7000 |
-| Straight Flush | +9000 |
+| Event | Payload | Purpose |
+|-------|---------|---------|
+| `room:state` | `RoomState` | Room info update |
+| `game:state` | `GameStateBroadcast` | Full game state (includes ledger) |
+| `game:hand` | `HandDeal` | Private hand dealt |
+| `game:round-end` | `{ winners, winAmount }` | Hand result |
+| `game:new-round` | — | New round started |
+| `game:timer-update` | `{ playerId, timeRemaining }` | Action timer |
+| `game:log` | `GameLogEntry` | Actions history entry |
+| `game:cards-revealed` | `{ playerId, playerName, cards }` | Card reveal |
 
 ## UI Controls
 
-| Input | Action |
-|-------|--------|
-| Click | Lock pointer (FPS mode) |
-| Mouse Move | Look around |
-| Key `1` | Fold |
-| Key `2` | Call/Check |
-| Key `3` | Raise |
-| ESC | Release pointer |
-| Yellow Button | Toggle game mode |
+### Desktop (Keyboard)
+| Key | Action |
+|-----|--------|
+| Mouse | Look around (pointer locked) |
+| 1 | Fold |
+| 2 | Call / Check |
+| 3 | Raise (opens slider) |
+| 4-9 | Emotes (wave, thumbsup, fistslam, laugh, cry, shrug) |
+| S | Show cards (showdown, folded) |
+| ← → | Adjust raise amount |
+| Shift + ← → | Big raise steps |
+| Enter | Confirm raise |
+| Escape | Close slider / unlock pointer |
 
-## 3D Scene Layout
+### Mobile (Touch)
+| Gesture | Action |
+|---------|--------|
+| Swipe | Look around |
+| Tap buttons | Fold / Call / Raise |
+| Tap emote toggle | Expand emote menu |
+| Tap ledger button | Open player ledger |
 
-```
-Camera (FPS view at [0, 2, 6])
-├── Table (cylinder at [0, -0.2, 0])
-├── Players (ellipse around table, radius X: 5, Z: 3.5)
-├── Floor (grid at Y: -3)
-├── Walls (4 box meshes at ±20 units)
-└── Sky (shader background)
-```
+## Player Ledger Fields
 
-## Dependencies
+| Field | Type | Description |
+|-------|------|-------------|
+| `playerName` | string | Player display name |
+| `playerColor` | string | Avatar hex color |
+| `handsPlayed` | number | Total hands dealt into |
+| `handsWon` | number | Hands where player won pot |
+| `chipsWon` | number | Total chips awarded from pots |
+| `chipsBuyIn` | number | Total chips bought (initial + rebuys) |
+| `chipsNet` | number | Current chips minus total buy-in |
+| `isConnected` | boolean | Currently in room |
+| `currentChips` | number | Current chip count |
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| react | 18.2.0 | UI framework |
-| react-dom | 19.2.4 | DOM rendering |
-| three | 0.161.0 | 3D engine |
-| @react-three/fiber | 8.15.16 | React renderer for Three.js |
-| @react-three/drei | 9.102.6 | Three.js helpers |
-| @google/genai | 0.2.1 | Gemini AI client |
-| typescript | 5.8.2 | Type checking |
-| vite | 6.2.0 | Build tool |
+## Table Config Defaults
 
-## API Models
+| Setting | Default |
+|---------|---------|
+| Small Blind | 10 |
+| Big Blind | 20 |
+| Min Buy-In | 200 |
+| Max Buy-In | 5000 |
+| Action Timeout | 30s |
+| Variant | Hold'em |
 
-| Model | Purpose |
-|-------|---------|
-| gemini-3-flash-preview | Chat generation |
-| gemini-2.5-flash-preview-tts | Text-to-speech |
+## Emotes
 
-## Environment Variables
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `GEMINI_API_KEY` | Yes | Google AI API authentication |
+| Emote | Icon | Desktop Key |
+|-------|------|-------------|
+| wave | 👋 | 4 |
+| thumbsup | 👍 | 5 |
+| fistslam | 👊 | 6 |
+| laugh | 😂 | 7 |
+| cry | 😭 | 8 |
+| shrug | 🤷 | 9 |
 
 ## Ports
 
 | Port | Service |
 |------|---------|
-| 3000 | Vite dev server |
+| 3000 | Vite dev server (client) |
+| 3001 | Express + Socket.io (server) |
 
-## Build Output
+## Dependencies
 
-| Command | Output Directory |
-|---------|------------------|
-| `npm run build` | `dist/` |
-| `npm run dev` | In-memory (HMR) |
+### Client (root package.json)
+| Package | Version | Purpose |
+|---------|---------|---------|
+| react | 18.2.0 | UI framework |
+| react-dom | 18.2.0 | DOM rendering |
+| three | 0.161.0 | 3D engine |
+| @react-three/fiber | 8.15.16 | React Three.js renderer |
+| @react-three/drei | 9.102.6 | Three.js helpers |
+| socket.io-client | ^4.7.5 | Socket.io client |
+| uuid | 9.0.1 | ID generation |
+| vite | ^6.2.0 | Build tool |
+| typescript | ~5.8.2 | Type checking |
+| concurrently | ^9.1.0 | Run multiple commands |
+
+### Server (server/package.json)
+| Package | Version | Purpose |
+|---------|---------|---------|
+| express | ^4.21.0 | HTTP server |
+| socket.io | ^4.7.5 | WebSocket server |
+| uuid | ^9.0.1 | ID generation |
+| cors | ^2.8.5 | CORS middleware |
+| tsx | ^4.19.0 | TypeScript execution |

@@ -1,141 +1,136 @@
 # Architecture Overview
 
 ## Application Type
-First-person 3D multiplayer poker game with proximity voice chat
+First-person 3D multiplayer poker game with proximity voice chat, running entirely in the browser.
 
 ## Primary Goal
-Browser-based multiplayer poker where players can hear each other via spatial audio based on their position at the table. AI bots serve as testing/practice opponents while multiplayer features are being developed.
+Browser-based multiplayer poker where players sit around a virtual 3D table and communicate via spatial audio. The server is authoritative for all game logic; clients render state and send actions.
 
 ## Core Technologies
-- **React 18. 2** - UI framework
-- **TypeScript 5.8** - Type safety
+- **React 18.2** - UI framework
+- **TypeScript 5.8** - Type safety (client + server)
 - **Three.js 0.161** - 3D rendering engine
-- **React Three Fiber** - React renderer for Three.js
+- **React Three Fiber 8.15** - React renderer for Three.js
 - **Vite 6.2** - Build tool and dev server
-- **Google Gemini AI** - Bot testing (chat generation and TTS)
-- **WebRTC** (planned) - Multiplayer networking and voice chat
+- **Node.js + Express** - Backend HTTP server
+- **Socket.io 4.7** - Real-time bidirectional communication
+- **WebRTC** - Peer-to-peer voice chat with spatial audio
 
 ## Application Flow
 
 ### Entry Point
-`index.tsx` → `App.tsx` → `GameScene.tsx` + `HUD.tsx`
+`index.tsx` → `App.tsx` → `Lobby.tsx` (pre-game) or `GameScene.tsx` + `HUD.tsx`/`MobileControls.tsx` (in-game)
 
 ### State Management
-Centralized in `App.tsx`:
-- `players[]` - All player data (chips, hands, bets, positions)
-- `gameState` - Current stage, pot, community cards, turn tracking
-- `hasStarted` - Audio/game initialization flag
-- `micVolume` - Audio visualization state
+Centralized in `App.tsx`, driven by Socket.io events from server:
+- `players[]` - All player data (chips, bets, positions, emotes)
+- `gameStage` - Current stage (PREFLOP through SHOWDOWN)
+- `communityCards`, `pot`, `myHand` - Game state
+- `gameLogs` - Actions history feed
+- `ledger` - Player stats (hands, wins, chips, net profit/loss)
+- `roomCode`, `hostId` - Room management
+- `revealedCards`, `showdownResults`, `sidePots` - Showdown data
 
-### Game Loop
-1. **Initialization**: `initAudioAndGame()` - Sets up audio context and starts first round
-2. **New Round**: `startNewRound()` - Deals cards, posts blinds, resets state
-3. **Bot Turns**: `useEffect` triggers `handleBotTurn()` when bot is current player
-4. **Actions**: `processAction()` - Handles fold/call/raise, updates state
-5. **Round Completion**: `checkRoundCompletion()` - Advances stages or triggers showdown
-6. **Showdown**: `handleShowdown()` - Determines winners, distributes pot, starts new round
+### Game Loop (Server-Authoritative)
+1. **Room Setup**: Host creates room → players join → all ready up
+2. **Deal**: `GameManager.startNewRound()` - shuffles, deals, posts blinds
+3. **Betting**: Players send actions via Socket.io → server validates and broadcasts
+4. **Progression**: Server advances stages (flop/turn/river) automatically
+5. **Showdown**: Server evaluates hands, distributes pots (including side pots), updates ledger
+6. **Auto-Deal**: After 7s delay, next hand auto-deals
 
 ## Component Hierarchy
 
 ```
 App
-├── GameScene
-│   ├── PointerLockControls
-│   ├── PokerTable (community cards, pot display)
-│   ├── FirstPersonHand (user's cards rendered as weapon)
-│   ├── PlayerAvatar[] (8 bots with spatial audio)
-│   ├── Floor + Walls
-│   └── Lighting (Sky, Ambient, Point)
-└── HUD
-    ├── Info Panel (game mode, FPS display)
-    ├── Chat Feed (bot messages)
-    ├── Chips/HP Display (user stats)
-    ├── Community Cards Preview
-    └── Action Buttons (fold/call/raise)
+├── Lobby (pre-game)
+│   ├── Name Entry
+│   ├── Create/Join Room
+│   ├── Table Settings
+│   └── Ready/Start
+└── Game (in-game)
+    ├── GameScene (3D canvas)
+    │   ├── CameraPositioner
+    │   ├── PokerTable (felt, community cards, pot)
+    │   ├── FirstPersonHand (user's cards as FPS weapon)
+    │   ├── PlayerAvatar[] (other players with head tracking)
+    │   ├── Floor + Arena
+    │   └── Lighting (Sky, Ambient, Point)
+    ├── HUD (desktop overlay)
+    │   ├── Info Panel (room code, player count, variant)
+    │   ├── Actions History Feed (top-right, formerly "Game Log")
+    │   ├── Chips/Bet Display + Best Hand (bottom-left)
+    │   ├── Emote Menu (expandable, bottom-left)
+    │   ├── Action Buttons (fold/call/raise, bottom-right)
+    │   ├── Raise Slider Panel
+    │   ├── Ledger Modal (player stats table)
+    │   ├── Keybinds Panel (floating reference)
+    │   └── Settings Modal (host-only)
+    └── MobileControls (touch interface)
+        ├── Touch Camera Area
+        ├── Top HUD (room code, chips, pot, ledger button)
+        ├── Emote Menu (expandable toggle)
+        ├── Action Buttons (bottom, large touch targets)
+        ├── Raise Slider Panel
+        ├── Ledger Modal
+        └── MobileCardOverlay
 ```
 
 ## Data Flow
 
-### Poker Logic
-`services/pokerLogic.ts` provides pure functions:
-- `createDeck()` - Shuffled 52-card deck
-- `dealCards()` - Extract N cards from deck
-- `evaluateHandStrength()` - Calculates hand score (supports Hold'em/Omaha)
-- `determineWinners()` - Compares all active player hands
+### Client → Server → Client
+1. User taps action button → `socketService.sendAction()`
+2. Socket.io emits `game:action` to server
+3. `GameManager.processAction()` validates and updates state
+4. Server broadcasts `game:state` to all clients in room
+5. `App.tsx` updates React state → components re-render
 
-### AI Integration
-`services/geminiService.ts` (for test bots only):
-- `generateBotChat()` - Text generation with personality/context
-- `generateBotSpeech()` - PCM audio data for TTS
+### Real-Time Features
+- **Head Tracking**: `player:look` events at ~15fps, volatile delivery
+- **Emotes**: `player:emote` → 3s display above avatar
+- **Voice**: WebRTC peer connections, spatial audio via Web Audio API
+- **Timer**: Server broadcasts countdown, client shows visual + sound
 
-### Multiplayer System (in development)
-- WebRTC peer connections for real-time state sync
-- Voice chat using WebRTC audio streams
-- Spatial audio processing for proximity-based volume
-- Game state synchronization across clients
+## Server Architecture
 
-### Audio System
-`PlayerAvatar.tsx` handles spatial audio:
-- For bots: Decodes base64 PCM from Gemini TTS
-- For multiplayer: Processes WebRTC audio streams
-- Creates Three.js PositionalAudio buffer
-- Plays audio from player's 3D position
+### GameManager (Authoritative)
+- Manages deck, dealing, betting rounds, showdowns
+- Tracks player ledger (cumulative stats: hands, wins, buy-ins, net)
+- Handles side pots for all-in scenarios
+- Action timer with auto-fold on timeout
+- Emits callbacks for state changes, round ends, hand deals
+
+### RoomManager
+- Room creation/joining with 6-character codes
+- Host management (auto-transfer on disconnect)
+- Socket event routing to correct GameManager
+- WebRTC signaling relay (offer/answer/ICE)
 
 ## Key Design Patterns
 
-### State Updates
-- Immutable updates with spread operators
-- Sequential updates for betting round logic
-- Delayed state changes (setTimeout) for UX pacing
-
-### 3D Rendering
-- `useFrame()` for animation loops (bobbing, idle animations)
-- `useThree()` for camera/context access
-- `useRef()` for Three.js object manipulation
-
-### Event Handling
-- Keyboard listeners for action buttons (keys 1-3)
-- Pointer lock events for FPS controls
-- Audio context resumption for browser policies
+- **Server-Authoritative**: All game logic server-side, clients are thin renderers
+- **Event-Driven**: Socket.io events drive all state changes
+- **Immutable State Updates**: React state via functional `setState`
+- **Responsive Design**: Separate desktop (HUD) and mobile (MobileControls) paths
+- **Expandable Menus**: Emotes and keybinds are toggleable for mobile compatibility
 
 ## Configuration
 
-### Constants (`constants.ts`)
-- Blinds, starting chips
-- Player positions (elliptical layout around table)
-- Player names and colors (for test bots)
+### Table Settings (per-room, host-configurable)
+- Small/Big Blind, Min/Max Buy-In, Action Timeout, Variant (Hold'em/Omaha)
 
 ### Environment
-- `GEMINI_API_KEY` injected via Vite as `process.env.API_KEY` (for bot testing)
-- WebRTC configuration (planned) for multiplayer signaling
+- No `.env` required for local dev
+- `VITE_SERVER_URL` defaults to `http://localhost:3001` in dev
+- Production: server serves built client as static files
 
 ## Build System
 
 ### Vite Config
-- Dev server on port 3000
-- Environment variable injection
-- Path alias `@/` for root imports
+- Dev server on port 3000 with proxy awareness
+- React plugin with HMR
+- Production build to `dist/`
 
 ### Import Maps (`index.html`)
-- ESM packages loaded from esm.sh CDN
-- React, Three.js, Gemini client as external modules
-
-## Future Multiplayer Architecture
-
-### WebRTC Integration
-- Peer-to-peer connections for game state
-- Signaling server for initial connection
-- STUN/TURN servers for NAT traversal
-- Media streams for voice chat
-
-### Voice Chat Processing
-- Capture local microphone input
-- Send to peers via WebRTC data channels
-- Process remote streams with spatial audio
-- Apply distance-based volume attenuation
-
-### Game State Sync
-- Host/client model or peer-to-peer consensus
-- Action validation and conflict resolution
-- Latency compensation
-- Reconnection handling
+- React, Three.js, R3F loaded from esm.sh CDN in dev
+- Vite bundles everything for production
