@@ -633,6 +633,8 @@ export class GameManager {
         for (const id of potWinnerIds) {
           const p = this.players.find(pl => pl.id === id);
           if (p) p.chips += share;
+          const entry = this.playerLedger.get(id);
+          if (entry) entry.chipsWon += share;
           allWinnerIds.add(id);
         }
         totalWinAmount += share;

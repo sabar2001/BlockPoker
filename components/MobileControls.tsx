@@ -415,7 +415,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               <button
                 key={em.emote}
                 onClick={() => { socketService.sendEmote(em.emote as EmoteType); setShowEmoteMenu(false); }}
-                onTouchStart={(e) => { e.stopPropagation(); socketService.sendEmote(em.emote as EmoteType); setShowEmoteMenu(false); }}
+                onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); socketService.sendEmote(em.emote as EmoteType); setShowEmoteMenu(false); }}
                 className="bg-black/80 backdrop-blur active:bg-black/95 border-2 border-gray-500 active:border-gray-300 w-12 h-12 flex items-center justify-center text-2xl rounded-xl shadow-lg transition-all active:scale-90"
                 style={{ pointerEvents: 'auto' }}
               >
@@ -426,7 +426,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         )}
         <button
           onClick={() => setShowEmoteMenu(prev => !prev)}
-          onTouchStart={(e) => { e.stopPropagation(); setShowEmoteMenu(prev => !prev); }}
+          onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); setShowEmoteMenu(prev => !prev); }}
           className="bg-black/80 backdrop-blur active:bg-black/95 border-2 border-gray-500 px-4 h-12 flex items-center gap-2 text-xl rounded-xl shadow-lg transition-all active:scale-95 text-white font-[VT323]"
           style={{ pointerEvents: 'auto' }}
         >
