@@ -39,6 +39,7 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
       'http://10.0.0.30:3000',
       'http://10.0.0.30:5173',
       'https://pokerpov-wocm.onrender.com', // Add the explicit HTTPS URL
+      'https://pokerpov.nimtech.xyz',        // Custom domain (Namecheap → Render)
       /\.onrender\.com$/,                    // Simplified regex
     ],
     methods: ['GET', 'POST'],
